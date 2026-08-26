@@ -25,7 +25,7 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       await api.login(email.trim(), password);
-      router.replace('/admin/reservas');
+      router.replace('/admin/dashboard');
     } catch {
       setError('Credenciales inválidas o acceso temporalmente bloqueado.');
     } finally {

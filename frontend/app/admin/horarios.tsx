@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '@/src/api';
 import { colors, spacing, type, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
+import { AdminMenu } from '@/src/components/AdminMenu';
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -139,9 +140,7 @@ export default function ScheduleAdmin() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.replace('/admin/reservas')} style={styles.iconButton} accessibilityLabel="Volver a reservas">
-          <Feather name="arrow-left" size={20} color={colors.ink} />
-        </Pressable>
+        <AdminMenu current="horarios" />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Horarios</Text>
           <Text style={styles.subtitle}>Agenda independiente por día</Text>

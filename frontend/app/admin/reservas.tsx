@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, BookingStatus } from '@/src/api';
 import { colors, spacing, type, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
+import { AdminMenu } from '@/src/components/AdminMenu';
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   pending_confirmation: 'Pendiente',
@@ -133,16 +134,11 @@ export default function ReservationsAdmin() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.replace('/admin/dashboard')} style={styles.iconButton} accessibilityLabel="Volver al panel">
-          <Feather name="arrow-left" size={20} color={colors.ink} />
-        </Pressable>
+        <AdminMenu current="reservas" />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Reservas</Text>
           <Text style={styles.subtitle}>WhatsApp, confirmación y seguimiento</Text>
         </View>
-        <Pressable onPress={() => router.push('/admin/horarios')} style={styles.iconButton} accessibilityLabel="Configurar horarios">
-          <Feather name="calendar" size={18} color={colors.ink} />
-        </Pressable>
         <Pressable onPress={() => { setRefreshing(true); load(); }} style={styles.iconButton} accessibilityLabel="Actualizar reservas">
           <Feather name="refresh-cw" size={18} color={colors.ink} />
         </Pressable>
