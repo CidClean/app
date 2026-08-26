@@ -275,6 +275,27 @@ DEFAULT_POLICIES = [
     "La reserva puede requerir una confirmación adicional de la ubicación y el traslado.",
 ]
 
+DEFAULT_CONTENT_BLOCKS = [
+    {
+        "section_key": "about",
+        "eyebrow": "01 · Sobre Miguel",
+        "title": "Detalle, técnica y vocación de servicio.",
+        "content": (
+            "Miguel Ángel Suárez es graduado de Medicina en Cuba y encontró en la barbería una actividad que combina precisión, creatividad y trato directo con las personas.\n\n"
+            "Comenzó en la barbería por el placer de realizar cada corte con el máximo nivel de detalle y por la satisfacción de ver a un cliente feliz con el resultado.\n\n"
+            "Cuenta con experiencia en cortes clásicos, cortes a tijera y cortes a máquina, y aplica un enfoque personalizado considerando el estilo, las características del cabello y las facciones del cliente."
+        ),
+    },
+    {
+        "section_key": "hero",
+        "eyebrow": "Barbería premium a domicilio · Torreón",
+        "title": "Precisión y estilo, donde tú estés.",
+        "content": (
+            "Cortes, barba y cuidado facial con atención personalizada, técnica detallada y la comodidad de recibir el servicio en tu residencia, hotel u oficina."
+        ),
+    },
+]
+
 async def seed():
     if await db.services.count_documents({}) == 0:
         for s in DEFAULT_SERVICES:
@@ -291,6 +312,9 @@ async def seed():
     if await db.policies.count_documents({}) == 0:
         for i, p in enumerate(DEFAULT_POLICIES):
             await db.policies.insert_one({"id": str(uuid.uuid4()), "content": p, "display_order": i + 1, "active": True})
+    for cb in DEFAULT_CONTENT_BLOCKS:
+        if not await db.content_blocks.find_one({"section_key": cb["section_key"]}):
+            await db.content_blocks.insert_one({"id": str(uuid.uuid4()), **cb, "active": True, "updated_at": now_iso()})
     if not await db.site_settings.find_one({}):
         await db.site_settings.insert_one(SiteSettings().model_dump())
     if not await db.booking_settings.find_one({}):
@@ -461,6 +485,40 @@ async def create_booking(payload: BookingInput):
         accepted_policies=True,
     )
     await db.bookings.insert_one(booking.model_dump())
+    # Upsert client record keyed by phone
+    phone_key = booking.phone.replace(" ", "").replace("-", "").strip()
+    existing_client = await db.clients.find_one({"phone_key": phone_key}, {"_id": 0})
+    if existing_client:
+        await db.clients.update_one(
+            {"phone_key": phone_key},
+            {
+                "$set": {
+                    "last_seen_at": now_iso(),
+                    "last_address": booking.address,
+                    "last_neighborhood": booking.neighborhood,
+                    "last_latitude": booking.latitude,
+                    "last_longitude": booking.longitude,
+                    "name": booking.name,
+                },
+                "$inc": {"bookings_count": 1},
+            },
+        )
+    else:
+        await db.clients.insert_one({
+            "id": str(uuid.uuid4()),
+            "phone_key": phone_key,
+            "phone": booking.phone,
+            "name": booking.name,
+            "first_seen_at": now_iso(),
+            "last_seen_at": now_iso(),
+            "bookings_count": 1,
+            "last_address": booking.address,
+            "last_neighborhood": booking.neighborhood,
+            "last_latitude": booking.latitude,
+            "last_longitude": booking.longitude,
+            "notes": "",
+            "tags": [],
+        })
     return {
         "ok": True,
         "booking": booking.model_dump(),
@@ -741,6 +799,77 @@ async def delete_media(mid: str, email: str = Depends(require_admin)):
     r = await db.media.update_one({"id": mid}, {"$set": {"active": False}})
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Media no encontrada")
+    return {"ok": True}
+
+# ---------- Content blocks (Hero, About Miguel, etc.) ----------
+
+class ContentBlockInput(BaseModel):
+    eyebrow: Optional[str] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
+    cta_label: Optional[str] = None
+    cta_url: Optional[str] = None
+    active: Optional[bool] = None
+
+@api.get("/content-blocks")
+async def list_content_blocks():
+    items = await db.content_blocks.find({"active": True}, {"_id": 0}).to_list(200)
+    return items
+
+@api.get("/content-blocks/{key}")
+async def get_content_block(key: str):
+    b = await db.content_blocks.find_one({"section_key": key}, {"_id": 0})
+    if not b:
+        raise HTTPException(status_code=404, detail="Bloque no encontrado")
+    return b
+
+@api.put("/admin/content-blocks/{key}")
+async def update_content_block(key: str, payload: ContentBlockInput, email: str = Depends(require_admin)):
+    upd = {k: v for k, v in payload.model_dump().items() if v is not None}
+    upd["updated_at"] = now_iso()
+    r = await db.content_blocks.update_one({"section_key": key}, {"$set": upd}, upsert=True)
+    await db.admin_audit.insert_one({"id": str(uuid.uuid4()), "user_email": email, "action": "update", "entity_type": "content_block", "entity_id": key, "summary": "", "created_at": now_iso()})
+    b = await db.content_blocks.find_one({"section_key": key}, {"_id": 0})
+    return b
+
+# ---------- Clients (registro automático desde reservas) ----------
+
+class ClientUpdateInput(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+@api.get("/admin/clients")
+async def admin_list_clients(email: str = Depends(require_admin)):
+    items = await db.clients.find({}, {"_id": 0}).sort("last_seen_at", -1).to_list(1000)
+    return items
+
+@api.get("/admin/clients/{cid}")
+async def admin_get_client(cid: str, email: str = Depends(require_admin)):
+    c = await db.clients.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    # Match all historical bookings by normalized phone key
+    key = c.get("phone_key") or c["phone"].replace(" ", "").replace("-", "").strip()
+    all_bookings = await db.bookings.find({}, {"_id": 0}).sort("date", -1).to_list(1000)
+    bookings = [b for b in all_bookings if b["phone"].replace(" ", "").replace("-", "").strip() == key]
+    return {"client": c, "bookings": bookings}
+
+@api.put("/admin/clients/{cid}")
+async def admin_update_client(cid: str, payload: ClientUpdateInput, email: str = Depends(require_admin)):
+    upd = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not upd:
+        return {"ok": True}
+    r = await db.clients.update_one({"id": cid}, {"$set": upd})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return {"ok": True}
+
+@api.delete("/admin/clients/{cid}")
+async def admin_delete_client(cid: str, email: str = Depends(require_admin)):
+    r = await db.clients.delete_one({"id": cid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return {"ok": True}
 
 app.include_router(api)

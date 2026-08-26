@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +9,7 @@ import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
 import { Accordion } from '@/src/components/Accordion';
-import { api, Faq, Media, SiteSettings, Testimonial, Zone, absoluteMediaUrl } from '@/src/api';
+import { api, ContentBlock, Faq, Media, SiteSettings, Testimonial, Zone, absoluteMediaUrl } from '@/src/api';
 import { openWhatsApp, waMessages } from '@/src/contact';
 
 const HERO_IMG_FALLBACK = 'https://images.unsplash.com/photo-1599834562135-b6fc90e642ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85';
@@ -28,15 +27,19 @@ export default function Home() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [blocks, setBlocks] = useState<Record<string, ContentBlock>>({});
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [s, z, f, t] = await Promise.all([
-        api.siteSettings(), api.zones(), api.faqs(), api.testimonials(),
+      const [s, z, f, t, cb] = await Promise.all([
+        api.siteSettings(), api.zones(), api.faqs(), api.testimonials(), api.contentBlocks(),
       ]);
       setSettings(s); setZones(z); setFaqs(f); setTestimonials(t);
-    } catch (e) { /* silent */ }
+      const map: Record<string, ContentBlock> = {};
+      (cb as ContentBlock[]).forEach(b => { map[b.section_key] = b; });
+      setBlocks(map);
+    } catch { /* silent */ }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -66,13 +69,13 @@ export default function Home() {
             <View style={styles.heroTop}>
               <View style={styles.eyebrowRow}>
                 <View style={[styles.dash, { backgroundColor: colors.bronze }]} />
-                <Text style={[type.eyebrow, { color: colors.paper }]}>Barbería premium a domicilio · Torreón</Text>
+                <Text style={[type.eyebrow, { color: colors.paper }]}>{blocks.hero?.eyebrow || 'Barbería premium a domicilio · Torreón'}</Text>
               </View>
             </View>
             <View>
-              <Text style={[type.h1, styles.heroTitle]}>Precisión y estilo,{'\n'}donde tú estés.</Text>
+              <Text style={[type.h1, styles.heroTitle]}>{blocks.hero?.title || 'Precisión y estilo,\ndonde tú estés.'}</Text>
               <Text style={styles.heroLead}>
-                Cortes, barba y cuidado facial con atención personalizada, técnica detallada y la comodidad de recibir el servicio en tu residencia, hotel u oficina.
+                {blocks.hero?.content || 'Cortes, barba y cuidado facial con atención personalizada, técnica detallada y la comodidad de recibir el servicio en tu residencia, hotel u oficina.'}
               </Text>
               <View style={styles.heroBtns}>
                 <PillButton
@@ -114,20 +117,16 @@ export default function Home() {
 
         {/* About / story card */}
         <View style={styles.section}>
-          <SectionHead eyebrow="01 · Sobre Miguel" title={'Detalle, técnica y\nvocación de servicio.'} />
+          <SectionHead eyebrow={blocks.about?.eyebrow || '01 · Sobre Miguel'} title={blocks.about?.title || 'Detalle, técnica y\nvocación de servicio.'} />
           <View style={styles.storyCard}>
             <Text style={styles.monogram}>M</Text>
             <View style={{ gap: spacing.md }}>
               <Text style={[type.small, { color: 'rgba(244,241,233,0.7)' }]}>MIGUEL ÁNGEL SUÁREZ</Text>
-              <Text style={[type.h3, { color: colors.paper }]}>
-                Encontré en la barbería una actividad que combina precisión, creatividad y trato directo con las personas.
-              </Text>
-              <Text style={[type.body, { color: 'rgba(244,241,233,0.75)' }]}>
-                Graduado de Medicina en Cuba, comencé en la barbería por el placer de realizar cada corte con el máximo nivel de detalle y por la satisfacción de ver a un cliente feliz con el resultado.
-              </Text>
-              <Text style={[type.body, { color: 'rgba(244,241,233,0.75)' }]}>
-                Experiencia en cortes clásicos, cortes a tijera y cortes a máquina, con enfoque personalizado considerando el estilo, las características del cabello y las facciones del cliente.
-              </Text>
+              {(blocks.about?.content || 'Miguel Ángel Suárez es graduado de Medicina en Cuba y encontró en la barbería una actividad que combina precisión, creatividad y trato directo con las personas.\n\nComenzó en la barbería por el placer de realizar cada corte con el máximo nivel de detalle y por la satisfacción de ver a un cliente feliz con el resultado.\n\nCuenta con experiencia en cortes clásicos, cortes a tijera y cortes a máquina, y aplica un enfoque personalizado considerando el estilo, las características del cabello y las facciones del cliente.').split(/\n\n+/).map((para, i) => (
+                <Text key={i} style={[i === 0 ? type.h3 : type.body, { color: i === 0 ? colors.paper : 'rgba(244,241,233,0.75)' }]}>
+                  {para}
+                </Text>
+              ))}
             </View>
             <View style={styles.signature}>
               <View style={styles.signLine} />
@@ -254,14 +253,17 @@ function StickyHeader() {
         <Text style={styles.brand}>Miguel Suárez</Text>
         <Text style={styles.brandSub}>Barbero profesional a domicilio</Text>
       </View>
-      <Pressable onPress={() => router.push('/admin/login')} hitSlop={12} testID="admin-entry-btn">
-        <Feather name="user" size={18} color={colors.ink} />
-      </Pressable>
     </View>
   );
 }
 
 function Footer({ settings }: { settings: SiteSettings | null }) {
+  const [taps, setTaps] = useState(0);
+  const onYearPress = () => {
+    const n = taps + 1;
+    if (n >= 5) { setTaps(0); router.push('/admin/login'); }
+    else setTaps(n);
+  };
   return (
     <View style={styles.footer}>
       <Text style={[type.h3, { color: colors.paper }]}>Miguel Suárez</Text>
@@ -275,9 +277,11 @@ function Footer({ settings }: { settings: SiteSettings | null }) {
       <Pressable onPress={() => router.push('/policies')}>
         <Text style={[type.micro, { color: colors.bronze }]}>POLÍTICAS DE RESERVA</Text>
       </Pressable>
-      <Text style={[type.small, { color: 'rgba(244,241,233,0.5)', marginTop: spacing.xl }]}>
-        © {new Date().getFullYear()} Miguel Suárez · Todos los derechos reservados
-      </Text>
+      <Pressable onPress={onYearPress} hitSlop={12} testID="footer-year-btn">
+        <Text style={[type.small, { color: 'rgba(244,241,233,0.5)', marginTop: spacing.xl }]}>
+          © {new Date().getFullYear()} Miguel Suárez · Todos los derechos reservados
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -285,9 +289,6 @@ function Footer({ settings }: { settings: SiteSettings | null }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,

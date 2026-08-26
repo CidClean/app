@@ -1,0 +1,54 @@
+{
+  "summary": "Backend re-tested against public URL (https://miguel-barber.preview.emergentagent.com/api). 40/40 pytest tests pass (100%) — 9 new tests for content-blocks + clients auto-registry, plus full 31-test regression (auth, services CRUD, zones/faqs/testimonials, booking-settings, available-slots, POST /bookings validation, admin site-settings, change-password, media upload lifecycle, hero/about images, booking lat/lng). Verified all requested new behavior: (1) GET /api/content-blocks returns list containing 'about' + 'hero' with required fields (section_key, eyebrow, title, content, active) and no _id leak. (2) GET /api/content-blocks/about returns the about block. (3) GET /api/content-blocks/nonexistent returns 404. (4) PUT /api/admin/content-blocks/about with valid token updates title+content — verified via public GET — then reverted to original values. (5) PUT /api/admin/content-blocks/* without token returns 401. (6) POST /api/bookings with a NEW phone (namespace 999-…) auto-creates a client document in db.clients with bookings_count=1, name, first_seen_at, last_seen_at, last_address, last_neighborhood, phone_key. (7) POST /api/bookings with the SAME phone (once with spaces '999 100 0001', once without '9991000001') is normalized to a single phone_key: bookings_count increments to 2, last_seen_at/last_address/last_neighborhood/name updated, and NO duplicate client row is created. (8) GET /api/admin/clients (with token) returns clients ordered by last_seen_at desc — verified ordering explicitly for two test clients. (9) GET /api/admin/clients without token returns 401. (10) GET /api/admin/clients/{cid} returns {client, bookings} with the phone's booking history. (11) PUT /api/admin/clients/{cid} updates notes + tags. (12) DELETE /api/admin/clients/{cid} removes only the client; bookings for that phone are preserved (verified by count before/after). (13) No _id leaks anywhere in list/detail responses. Regression: change-password, media upload/list/delete lifecycle, site-settings hero/about images, booking lat/lng persistence, admin services CRUD, all booking rules, available-slots, booking conflict (409) all still pass. Cleanup: 999-namespaced clients and bookings removed after each test; final DB scan shows 0 TEST_ bookings and 0 999-prefixed clients remaining. About content-block reverted to original title 'Detalle, técnica y vocación de servicio.'",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "startup",
+        "issue": "passlib/bcrypt version warning still logged on startup ('trapped error reading bcrypt version'). Non-fatal; hashing/verification works."
+      },
+      {
+        "endpoint": "GET /api/files/{path}",
+        "issue": "Preview ingress overrides backend's Cache-Control to no-store (documented in iteration_2). Not a backend bug."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_miguel_backend.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_content_and_clients.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. All requested behaviors verified end-to-end.",
+    "Optional (still open from iter 2): silence passlib/bcrypt startup warning by pinning compatible versions.",
+    "Optional: consider normalizing phone_key more aggressively (also strip '-', '(', ')', leading '+') on the server. Current implementation strips ' ' and '-' only — the request only required spaces to be stripped, which passes, but user-typed '+52 871…' would create a distinct phone_key from '871…'."
+  ],
+  "critical_code_review_comments": [
+    "server.py:487-521 POST /bookings correctly upserts db.clients keyed on phone_key = phone.replace(' ', '').replace('-', ''). $inc used for bookings_count. Good.",
+    "server.py:842-869 admin clients endpoints (list/detail/update/delete) all guarded by require_admin, all project out _id. GET /admin/clients/{cid} queries bookings by client's stored phone (raw) — this works because the phone stored on the client row is the LATEST phone string used at booking time; historical bookings with a differently-formatted phone for the same person WILL NOT show up in the detail view. Consider querying bookings by phone_key normalization instead to fully match the clients-collection contract. Not blocking for current tests (they use the same phone format for detail lookup).",
+    "server.py:826-833 PUT /admin/content-blocks/{key} uses upsert=True — allows creating new content blocks on the fly. OK.",
+    "ContentBlockInput does NOT include section_key; only the URL path defines it. Good — prevents drift.",
+    "server.py:487 phone_key normalization strips only ' ' and '-' — see optional action item above.",
+    "server.py:833 update_content_block ignores the `active` flag correctly (it's in the model), but the public GET /content-blocks filters {active: True}; so setting active=false would remove a block from the public list — verified by inspection, not tested."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_content_and_clients.py (new — 9 tests: content-blocks public GET/list/404/update-revert/auth + clients auto-registration on booking, phone normalization, admin list ordering, detail with history, update notes/tags, delete preserves bookings)"
+  ],
+  "success_rate": {
+    "backend": "100% (40/40)",
+    "frontend": "n/a (backend-only run)"
+  },
+  "seed_data_creation": "Created ephemeral: bookings + client rows with phone_key namespace '999…' on next-open-day (Sunday). All 999-namespaced clients and bookings deleted in setup_method + teardown_method + teardown_module. Final DB verified: 0 clients matching ^999, 0 bookings matching ^999, 0 TEST_ bookings, about content-block reverted to original title.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `cd /app/backend && pytest tests/ --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml`. Three test files now exist: test_miguel_backend.py (base regression), test_new_features.py (change-password, media, hero/about images, lat/lng), test_content_and_clients.py (content blocks + auto-registered clients). All use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env and admin creds from /app/memory/test_credentials.md. test_content_and_clients.py connects to Mongo directly (via /app/backend/.env MONGO_URL/DB_NAME) to seed/verify/cleanup — this is intentional because there is no public DELETE booking endpoint. All test-created data is in the phone_key namespace '999…' to avoid touching real user bookings.",
+  "rca_of_issue": "N/A — all tests pass. Two transient failures observed during authoring: (a) parallel workers (xdist) needed slot re-fetch between bookings on the same day to avoid 409 buffer conflicts, and (b) an overly-broad cleanup regex ('^TEST_' on bookings.name) was racing with test_miguel_backend.py's TEST_User booking — narrowed the cleanup to the '999' phone namespace and the race disappeared. Both fixes are in test_content_and_clients.py only; server code was not modified."
+}

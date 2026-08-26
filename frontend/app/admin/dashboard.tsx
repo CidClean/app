@@ -9,9 +9,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
-import { api, Service, Zone, Faq, Testimonial, Media, absoluteMediaUrl } from '@/src/api';
+import { api, Service, Zone, Faq, Testimonial, Media, Client, ContentBlock, absoluteMediaUrl } from '@/src/api';
 
-type Tab = 'inicio' | 'servicios' | 'zonas' | 'faqs' | 'resenas' | 'fotos' | 'ajustes' | 'cuenta';
+type Tab = 'inicio' | 'servicios' | 'zonas' | 'faqs' | 'resenas' | 'clientes' | 'contenido' | 'fotos' | 'ajustes' | 'cuenta';
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
@@ -51,7 +51,7 @@ export default function Dashboard() {
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsRow} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-        {(['inicio','servicios','zonas','faqs','resenas','fotos','ajustes','cuenta'] as Tab[]).map(t => (
+        {(['inicio','servicios','zonas','faqs','resenas','clientes','contenido','fotos','ajustes','cuenta'] as Tab[]).map(t => (
           <Pressable key={t} onPress={() => setTab(t)} style={[styles.tabChip, tab === t && styles.tabChipActive]} testID={`tab-${t}`}>
             <Text style={[styles.tabText, tab === t && { color: colors.paper }]}>{labelFor(t)}</Text>
           </Pressable>
@@ -63,6 +63,8 @@ export default function Dashboard() {
         {tab === 'zonas' && <ZonesTab />}
         {tab === 'faqs' && <FaqsTab />}
         {tab === 'resenas' && <TestimonialsTab />}
+        {tab === 'clientes' && <ClientsTab />}
+        {tab === 'contenido' && <ContentTab />}
         {tab === 'fotos' && <MediaTab />}
         {tab === 'ajustes' && <SettingsTab />}
         {tab === 'cuenta' && <AccountTab />}
@@ -72,7 +74,7 @@ export default function Dashboard() {
 }
 
 function labelFor(t: Tab) {
-  const m: any = { inicio: 'Inicio', servicios: 'Servicios', zonas: 'Zonas', faqs: 'Preguntas', resenas: 'Reseñas', fotos: 'Fotos', ajustes: 'Ajustes', cuenta: 'Cuenta' };
+  const m: any = { inicio: 'Inicio', servicios: 'Servicios', zonas: 'Zonas', faqs: 'Preguntas', resenas: 'Reseñas', clientes: 'Clientes', contenido: 'Contenido', fotos: 'Fotos', ajustes: 'Ajustes', cuenta: 'Cuenta' };
   return m[t];
 }
 
@@ -434,7 +436,7 @@ function SettingsTab() {
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }}>
       <SectionHead eyebrow="Agenda" title="Días y horarios" />
-      <Text style={[type.small, { marginBottom: spacing.md }]}>Selecciona los días de la semana en los que aceptas reservas automáticas.</Text>
+      <Text style={[type.small, { marginBottom: spacing.md }]}>Los clientes solo verán como reservables los días marcados abajo y dentro del rango horario que definas. Cambia lo que quieras cuando quieras.</Text>
       <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
         {dayNames.map((n, i) => {
           const on = (bs.open_days || []).includes(i);
@@ -606,6 +608,169 @@ function AccountTab() {
       {err ? <Text style={[type.small, { color: colors.danger, marginTop: spacing.md }]}>{err}</Text> : null}
       {msg ? <Text style={[type.micro, { color: colors.bronze, marginTop: spacing.md }]}>{msg.toUpperCase()}</Text> : null}
       <PillButton label="Actualizar contraseña" onPress={submit} loading={busy} style={{ marginTop: spacing.xl }} testID="save-password-btn" />
+    </ScrollView>
+  );
+}
+
+function ClientsTab() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [selected, setSelected] = useState<Client | null>(null);
+  const [detail, setDetail] = useState<any | null>(null);
+  const [q, setQ] = useState('');
+  const load = async () => { try { setClients(await api.adminListClients()); } catch {} };
+  useEffect(() => { load(); }, []);
+
+  const openClient = async (c: Client) => {
+    setSelected(c);
+    try { setDetail(await api.adminGetClient(c.id)); } catch { setDetail(null); }
+  };
+
+  const saveNotes = async (notes: string) => {
+    if (!selected) return;
+    try { await api.adminUpdateClient(selected.id, { notes }); await load(); setSelected({ ...selected, notes }); }
+    catch (e: any) { alert(e.message); }
+  };
+
+  const remove = async (id: string) => {
+    try { await api.adminDeleteClient(id); setSelected(null); setDetail(null); await load(); }
+    catch (e: any) { alert(e.message); }
+  };
+
+  const filtered = clients.filter(c =>
+    !q.trim() ||
+    c.name.toLowerCase().includes(q.toLowerCase()) ||
+    c.phone.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+    (c.last_neighborhood || '').toLowerCase().includes(q.toLowerCase())
+  );
+
+  if (selected) {
+    return (
+      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }}>
+        <Pressable onPress={() => { setSelected(null); setDetail(null); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md }}>
+          <Feather name="arrow-left" size={16} color={colors.ink} />
+          <Text style={[type.button, { color: colors.ink }]}>VOLVER</Text>
+        </Pressable>
+        <SectionHead eyebrow="Cliente" title={selected.name} />
+        <View style={styles.card}>
+          <Text style={[type.micro]}>TELÉFONO</Text>
+          <Text style={[type.bodyStrong, { marginTop: 4 }]}>{selected.phone}</Text>
+          <Text style={[type.micro, { marginTop: spacing.md }]}>ÚLTIMA COLONIA</Text>
+          <Text style={[type.body, { marginTop: 4 }]}>{selected.last_neighborhood || '—'}</Text>
+          <Text style={[type.micro, { marginTop: spacing.md }]}>ÚLTIMA DIRECCIÓN</Text>
+          <Text style={[type.body, { marginTop: 4 }]}>{selected.last_address || '—'}</Text>
+          <Text style={[type.micro, { marginTop: spacing.md }]}>RESERVAS TOTALES</Text>
+          <Text style={[type.bodyStrong, { marginTop: 4 }]}>{selected.bookings_count}</Text>
+          <Text style={[type.micro, { marginTop: spacing.md }]}>PRIMERA · ÚLTIMA</Text>
+          <Text style={[type.small, { marginTop: 4 }]}>{new Date(selected.first_seen_at).toLocaleDateString('es-MX')} · {new Date(selected.last_seen_at).toLocaleDateString('es-MX')}</Text>
+        </View>
+        <Text style={[styles.formLabel, { marginTop: spacing.xl }]}>NOTAS PRIVADAS</Text>
+        <TextInput
+          value={selected.notes}
+          onChangeText={(v) => setSelected({ ...selected, notes: v })}
+          onBlur={() => saveNotes(selected.notes)}
+          multiline
+          placeholder="Preferencias, estilo habitual, alergias, etc."
+          placeholderTextColor={colors.inkSoft}
+          style={[styles.formInput, { minHeight: 90, textAlignVertical: 'top' }]}
+        />
+        <Text style={[type.small, { marginTop: 4, color: colors.inkSoft }]}>Se guarda automáticamente al salir del campo.</Text>
+
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionHead eyebrow="Historial" title="Reservas de este cliente" />
+          {detail?.bookings?.length ? detail.bookings.map((b: any) => (
+            <View key={b.id} style={styles.card}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={type.bodyStrong}>{b.service_name}</Text>
+                <Text style={[type.micro, { color: colors.bronze }]}>{b.status.toUpperCase()}</Text>
+              </View>
+              <Text style={[type.small, { marginTop: 4 }]}>{b.date} · {b.time} · ${b.service_price} MXN</Text>
+              <Text style={[type.small, { marginTop: 4 }]}>{b.address}, {b.neighborhood}</Text>
+              {b.note ? <Text style={[type.small, { marginTop: 6, fontStyle: 'italic' }]}>&ldquo;{b.note}&rdquo;</Text> : null}
+            </View>
+          )) : <View style={styles.empty}><Text style={type.body}>Sin reservas registradas.</Text></View>}
+        </View>
+
+        <Pressable onPress={() => remove(selected.id)} style={{ marginTop: spacing.xl }}>
+          <Text style={[type.button, { color: colors.danger }]}>ELIMINAR CLIENTE</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }}>
+      <SectionHead eyebrow="Clientes" title="Registro automático" />
+      <Text style={[type.small, { marginBottom: spacing.md }]}>
+        Cada reserva alimenta este registro. Toca un cliente para ver su historial completo y agregar notas privadas.
+      </Text>
+      <TextInput
+        value={q}
+        onChangeText={setQ}
+        placeholder="Buscar por nombre, teléfono o colonia"
+        placeholderTextColor={colors.inkSoft}
+        style={[styles.formInput, { marginBottom: spacing.md }]}
+      />
+      {filtered.length === 0 ? (
+        <View style={styles.empty}><Text style={type.body}>{clients.length === 0 ? 'Aún no hay clientes registrados. Se agregan automáticamente al recibir la primera reserva.' : 'Ningún cliente coincide con tu búsqueda.'}</Text></View>
+      ) : filtered.map(c => (
+        <Pressable key={c.id} onPress={() => openClient(c)} style={styles.card} testID={`client-${c.id}`}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={type.bodyStrong}>{c.name}</Text>
+              <Text style={[type.small, { marginTop: 4 }]}>{c.phone}</Text>
+              <Text style={[type.small, { marginTop: 2, color: colors.inkSoft }]}>{c.last_neighborhood || '—'} · {c.bookings_count} {c.bookings_count === 1 ? 'reserva' : 'reservas'}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.inkSoft} />
+          </View>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
+function ContentTab() {
+  const [blocks, setBlocks] = useState<Record<string, ContentBlock>>({});
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const load = async () => {
+    try {
+      const items = await api.contentBlocks();
+      const map: Record<string, ContentBlock> = {};
+      (items as ContentBlock[]).forEach(b => { map[b.section_key] = b; });
+      setBlocks(map);
+    } catch {}
+  };
+  useEffect(() => { load(); }, []);
+  const saveBlock = async (key: string) => {
+    const b = blocks[key];
+    if (!b) return;
+    try {
+      await api.adminUpdateContentBlock(key, { eyebrow: b.eyebrow, title: b.title, content: b.content });
+      setSavedMsg(`Guardado: ${key}`);
+      setTimeout(() => setSavedMsg(null), 2000);
+      await load();
+    } catch (e: any) { alert(e.message); }
+  };
+  const setField = (key: string, field: keyof ContentBlock, value: string) => {
+    setBlocks({ ...blocks, [key]: { ...(blocks[key] || { section_key: key, eyebrow: '', title: '', content: '', active: true }), [field]: value } });
+  };
+  const KEYS: { key: string; label: string; help: string }[] = [
+    { key: 'hero', label: 'Hero (portada)', help: 'Etiqueta superior, título grande y párrafo principal que ven los clientes al entrar.' },
+    { key: 'about', label: 'Sobre Miguel / historia', help: 'Narrativa de Miguel. Separa párrafos con una línea en blanco.' },
+  ];
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+      <SectionHead eyebrow="Contenido" title="Textos del sitio" />
+      {savedMsg ? <Text style={[type.micro, { color: colors.bronze, marginBottom: spacing.sm }]}>{savedMsg.toUpperCase()}</Text> : null}
+      {KEYS.map(({ key, label, help }) => (
+        <View key={key} style={[styles.form, { marginTop: spacing.md }]}>
+          <Text style={[type.eyebrow, { marginBottom: 4 }]}>{label.toUpperCase()}</Text>
+          <Text style={[type.small, { marginBottom: spacing.md }]}>{help}</Text>
+          <FormField label="Etiqueta superior" value={blocks[key]?.eyebrow || ''} onChange={(v: string) => setField(key, 'eyebrow', v)} />
+          <FormField label="Título" value={blocks[key]?.title || ''} onChange={(v: string) => setField(key, 'title', v)} multiline />
+          <FormField label="Contenido" value={blocks[key]?.content || ''} onChange={(v: string) => setField(key, 'content', v)} multiline />
+          <PillButton label={`Guardar ${label}`} onPress={() => saveBlock(key)} style={{ marginTop: spacing.md }} />
+        </View>
+      ))}
     </ScrollView>
   );
 }

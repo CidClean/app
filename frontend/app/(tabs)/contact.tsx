@@ -94,11 +94,6 @@ export default function Contact() {
             <Text style={[type.bodyStrong, { flex: 1 }]}>Preguntas frecuentes</Text>
             <Feather name="arrow-up-right" size={16} color={colors.ink} />
           </Pressable>
-          <Pressable onPress={() => router.push('/admin/login')} style={styles.linkRow} testID="contact-admin-btn">
-            <Feather name="lock" size={18} color={colors.ink} />
-            <Text style={[type.bodyStrong, { flex: 1 }]}>Panel administrativo</Text>
-            <Feather name="arrow-up-right" size={16} color={colors.ink} />
-          </Pressable>
         </View>
       </ScrollView>
     </View>

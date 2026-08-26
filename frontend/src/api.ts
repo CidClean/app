@@ -83,6 +83,18 @@ export const api = {
   adminListMedia: () => req('/admin/media', {}, true),
   adminUpdateMedia: (id: string, body: any) => req(`/admin/media/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteMedia: (id: string) => req(`/admin/media/${id}`, { method: 'DELETE' }, true),
+
+  contentBlocks: () => req('/content-blocks'),
+  contentBlock: (key: string) => req(`/content-blocks/${key}`),
+  adminUpdateContentBlock: (key: string, body: any) =>
+    req(`/admin/content-blocks/${key}`, { method: 'PUT', body: JSON.stringify(body) }, true),
+
+  adminListClients: () => req('/admin/clients', {}, true),
+  adminGetClient: (id: string) => req(`/admin/clients/${id}`, {}, true),
+  adminUpdateClient: (id: string, body: any) =>
+    req(`/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
+  adminDeleteClient: (id: string) => req(`/admin/clients/${id}`, { method: 'DELETE' }, true),
+
   uploadMedia: async (uri: string, filename: string, mimeType: string, category: string) => {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     const form = new FormData();
@@ -124,3 +136,5 @@ export type Faq = { id: string; question: string; answer: string; category: stri
 export type Testimonial = { id: string; display_name: string; service_name: string; content: string; permission_confirmed: boolean; active: boolean; display_order: number; };
 export type SiteSettings = { business_name: string; full_name: string; descriptor: string; slogan: string; phone: string; whatsapp: string; email: string; city: string; instagram: string; facebook: string; booking_url: string; hero_image_url: string; about_image_url: string; };
 export type Media = { id: string; storage_path: string; file_url: string; content_type: string; size: number; category: string; alt_text: string; active: boolean; display_order: number; created_at: string; };
+export type ContentBlock = { section_key: string; eyebrow: string; title: string; content: string; cta_label?: string; cta_url?: string; active: boolean; };
+export type Client = { id: string; phone: string; phone_key: string; name: string; first_seen_at: string; last_seen_at: string; bookings_count: number; last_address: string; last_neighborhood: string; last_latitude?: number | null; last_longitude?: number | null; notes: string; tags: string[]; };
