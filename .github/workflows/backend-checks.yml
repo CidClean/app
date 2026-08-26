@@ -1,22 +1,24 @@
-name: Backend checks
+name: Production checks
 
 on:
   pull_request:
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - '.github/workflows/backend-checks.yml'
   push:
     branches:
       - main
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - '.github/workflows/backend-checks.yml'
 
 permissions:
   contents: read
 
 jobs:
-  import-check:
+  backend-import-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,7 +36,7 @@ jobs:
         run: pip install -r backend/requirements.txt
 
       - name: Compile Python modules
-        run: python -m py_compile backend/server.py backend/main.py
+        run: python -m py_compile backend/server.py backend/main.py backend/production.py
 
       - name: Import production app
         working-directory: backend
@@ -49,7 +51,7 @@ jobs:
           CORS_ORIGINS: http://localhost:8081
         run: |
           python - <<'PY'
-          from main import app
+          from production import app
           paths = {route.path for route in app.routes}
           required = {
               '/api/health',
@@ -63,3 +65,36 @@ jobs:
               raise SystemExit(f'Missing required routes: {sorted(missing)}')
           print(f'Validated {len(paths)} API routes')
           PY
+
+  frontend-web-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+
+      - name: Enable Yarn
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Export web application
+        env:
+          EXPO_PUBLIC_BACKEND_URL: https://barber-page-api.onrender.com
+        run: yarn build:web
+
+      - name: Verify critical admin routes
+        run: |
+          test -f dist/admin/dashboard.html
+          test -f dist/admin/reservas.html
+          test -f dist/admin/horarios.html
+          test -f dist/admin/login.html
