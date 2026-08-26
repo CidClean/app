@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, RefreshControl, Switch, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,12 +9,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
+import { AdminMenu, DashboardSection } from '@/src/components/AdminMenu';
 import { api, Service, Zone, Faq, Testimonial, Media, Client, ContentBlock, absoluteMediaUrl } from '@/src/api';
 
-type Tab = 'inicio' | 'servicios' | 'zonas' | 'faqs' | 'resenas' | 'clientes' | 'contenido' | 'fotos' | 'ajustes' | 'cuenta';
+type Tab = DashboardSection;
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
+  const { tab: requestedTab } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>('inicio');
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -32,31 +34,24 @@ export default function Dashboard() {
     })();
   }, []);
 
-  const logout = async () => {
-    await api.logout();
-    router.replace('/admin/login');
-  };
+  useEffect(() => {
+    const allowed: Tab[] = ['inicio', 'servicios', 'zonas', 'faqs', 'resenas', 'clientes', 'contenido', 'fotos', 'ajustes', 'cuenta'];
+    if (requestedTab && allowed.includes(requestedTab as Tab)) {
+      setTab(requestedTab as Tab);
+    }
+  }, [requestedTab]);
 
   if (!ready) return null;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <AdminMenu current={tab} onSelectSection={setTab} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.brand}>Panel</Text>
+          <Text style={styles.brand}>{labelFor(tab)}</Text>
           <Text style={styles.brandSub}>{email}</Text>
         </View>
-        <Pressable onPress={logout} testID="admin-logout-btn" style={styles.logoutBtn}>
-          <Feather name="log-out" size={16} color={colors.ink} />
-        </Pressable>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsRow} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-        {(['inicio','servicios','zonas','faqs','resenas','clientes','contenido','fotos','ajustes','cuenta'] as Tab[]).map(t => (
-          <Pressable key={t} onPress={() => setTab(t)} style={[styles.tabChip, tab === t && styles.tabChipActive]} testID={`tab-${t}`}>
-            <Text style={[styles.tabText, tab === t && { color: colors.paper }]}>{labelFor(t)}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
       <View style={{ flex: 1 }}>
         {tab === 'inicio' && <HomeTab />}
         {tab === 'servicios' && <ServicesTab />}
@@ -394,68 +389,37 @@ function TestimonialForm({ initial, onCancel, onSave }: any) {
 }
 
 function SettingsTab() {
-  const [bs, setBs] = useState<any>(null);
   const [ss, setSs] = useState<any>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
-      try {
-        setBs(await api.bookingSettings());
-        setSs(await api.siteSettings());
-      } catch {}
+      try { setSs(await api.siteSettings()); } catch {}
     })();
   }, []);
-  const toggleDay = (d: number) => {
-    if (!bs) return;
-    const set = new Set<number>(bs.open_days || []);
-    if (set.has(d)) set.delete(d); else set.add(d);
-    setBs({ ...bs, open_days: Array.from(set).sort() });
-  };
-  const saveBs = async () => {
-    try {
-      await api.adminUpdateBookingSettings({
-        open_days: bs.open_days,
-        open_hour: parseInt(String(bs.open_hour)) || 11,
-        close_hour: parseInt(String(bs.close_hour)) || 18,
-        min_notice_minutes: parseInt(String(bs.min_notice_minutes)) || 60,
-        slot_step_minutes: parseInt(String(bs.slot_step_minutes)) || 15,
-      });
-      setSavedMsg('Agenda actualizada');
-      setTimeout(() => setSavedMsg(null), 2000);
-    } catch (e: any) { alert(e.message); }
-  };
+
   const saveSs = async () => {
     try {
       await api.adminUpdateSiteSettings(ss);
-      setSavedMsg('Sitio actualizado');
+      setSavedMsg('Información del negocio actualizada');
       setTimeout(() => setSavedMsg(null), 2000);
     } catch (e: any) { alert(e.message); }
   };
-  if (!bs || !ss) return null;
-  const dayNames = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+
+  if (!ss) return null;
+
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }}>
-      <SectionHead eyebrow="Agenda" title="Días y horarios" />
-      <Text style={[type.small, { marginBottom: spacing.md }]}>Los clientes solo verán como reservables los días marcados abajo y dentro del rango horario que definas. Cambia lo que quieras cuando quieras.</Text>
-      <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
-        {dayNames.map((n, i) => {
-          const on = (bs.open_days || []).includes(i);
-          return (
-            <Pressable key={i} onPress={() => toggleDay(i)} style={[styles.dayToggle, on && { backgroundColor: colors.ink, borderColor: colors.ink }]} testID={`day-${i}`}>
-              <Text style={[styles.dayToggleText, on && { color: colors.paper }]}>{n}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <FormField label="Hora de apertura (0-23)" value={String(bs.open_hour)} onChange={v => setBs({ ...bs, open_hour: v })} keyboardType="number-pad" />
-      <FormField label="Hora de cierre (0-23, último fin)" value={String(bs.close_hour)} onChange={v => setBs({ ...bs, close_hour: v })} keyboardType="number-pad" />
-      <FormField label="Aviso mínimo (min)" value={String(bs.min_notice_minutes)} onChange={v => setBs({ ...bs, min_notice_minutes: v })} keyboardType="number-pad" />
-      <FormField label="Intervalo entre inicios (min)" value={String(bs.slot_step_minutes)} onChange={v => setBs({ ...bs, slot_step_minutes: v })} keyboardType="number-pad" />
-      <PillButton label="Guardar agenda" onPress={saveBs} style={{ marginTop: spacing.lg }} testID="save-schedule-btn" />
-
-      <View style={{ height: spacing.huge }} />
-
       <SectionHead eyebrow="Sitio" title="Información del negocio" />
+      <Text style={[type.small, { marginBottom: spacing.md }]}>
+        Los días, horas, aviso mínimo e intervalos se administran únicamente desde Horarios en el menú principal.
+      </Text>
+      <PillButton
+        label="Abrir horarios"
+        variant="secondary"
+        onPress={() => router.push('/admin/horarios')}
+        style={{ marginBottom: spacing.lg, alignSelf: 'flex-start' }}
+      />
       <FormField label="Nombre comercial" value={ss.business_name} onChange={v => setSs({ ...ss, business_name: v })} />
       <FormField label="Descriptor" value={ss.descriptor} onChange={v => setSs({ ...ss, descriptor: v })} />
       <FormField label="Eslogan" value={ss.slogan} onChange={v => setSs({ ...ss, slogan: v })} multiline />
@@ -465,8 +429,7 @@ function SettingsTab() {
       <FormField label="Instagram URL" value={ss.instagram} onChange={v => setSs({ ...ss, instagram: v })} />
       <FormField label="Facebook URL" value={ss.facebook} onChange={v => setSs({ ...ss, facebook: v })} />
       <FormField label="Enlace Cal.com (opcional)" value={ss.booking_url} onChange={v => setSs({ ...ss, booking_url: v })} />
-      <PillButton label="Guardar sitio" onPress={saveSs} style={{ marginTop: spacing.lg }} />
-
+      <PillButton label="Guardar información" onPress={saveSs} style={{ marginTop: spacing.lg }} />
       {savedMsg ? <Text style={[type.micro, { color: colors.bronze, marginTop: spacing.md }]}>{savedMsg.toUpperCase()}</Text> : null}
     </ScrollView>
   );

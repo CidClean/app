@@ -1,9 +1,35 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const API = `${BASE}/api`;
-
 const TOKEN_KEY = 'admin_token';
+const EMAIL_KEY = 'admin_email';
+
+async function storageGet(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem(key);
+  }
+  try { return await SecureStore.getItemAsync(key); } catch { return AsyncStorage.getItem(key); }
+}
+
+async function storageSet(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.sessionStorage.setItem(key, value);
+    return;
+  }
+  try { await SecureStore.setItemAsync(key, value); } catch { await AsyncStorage.setItem(key, value); }
+}
+
+async function storageRemove(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.sessionStorage.removeItem(key);
+    return;
+  }
+  try { await SecureStore.deleteItemAsync(key); } catch { await AsyncStorage.removeItem(key); }
+}
 
 async function req<T = any>(path: string, opts: RequestInit = {}, auth = false): Promise<T> {
   const headers: Record<string, string> = {
@@ -11,8 +37,8 @@ async function req<T = any>(path: string, opts: RequestInit = {}, auth = false):
     ...(opts.headers as Record<string, string> || {}),
   };
   if (auth) {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const token = await storageGet(TOKEN_KEY);
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
   const res = await fetch(`${API}${path}`, { ...opts, headers });
   if (!res.ok) {
@@ -33,37 +59,43 @@ export const api = {
   faqs: () => req('/faqs'),
   testimonials: () => req('/testimonials'),
   policies: () => req('/policies'),
+  privacyNotice: () => req('/privacy-notice'),
   bookingSettings: () => req('/booking-settings'),
   availableSlots: (serviceId: string, date: string) =>
-    req(`/available-slots?service_id=${encodeURIComponent(serviceId)}&date_str=${date}`),
-  createBooking: (body: any) => req('/bookings', { method: 'POST', body: JSON.stringify(body) }),
+    req(`/available-slots?service_id=${encodeURIComponent(serviceId)}&date_str=${encodeURIComponent(date)}`),
+  createBooking: (body: any) => req('/bookings', {
+    method: 'POST',
+    body: JSON.stringify({ ...body, accepted_privacy: body.accepted_privacy ?? body.accepted_policies }),
+  }),
 
-  // admin
   login: async (email: string, password: string) => {
-    const r = await req<{ token: string; email: string }>('/admin/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+    const result = await req<{ token: string; email: string; expires_at?: string }>('/admin/login', {
+      method: 'POST', body: JSON.stringify({ email, password }),
     });
-    await AsyncStorage.setItem(TOKEN_KEY, r.token);
-    await AsyncStorage.setItem('admin_email', r.email);
-    return r;
+    await storageSet(TOKEN_KEY, result.token);
+    await storageSet(EMAIL_KEY, result.email);
+    return result;
   },
   logout: async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    await AsyncStorage.removeItem('admin_email');
+    try { await req('/admin/logout', { method: 'POST' }, true); } catch {}
+    await storageRemove(TOKEN_KEY);
+    await storageRemove(EMAIL_KEY);
   },
-  getStoredEmail: () => AsyncStorage.getItem('admin_email'),
-  getToken: () => AsyncStorage.getItem(TOKEN_KEY),
+  getStoredEmail: () => storageGet(EMAIL_KEY),
+  getToken: () => storageGet(TOKEN_KEY),
   me: () => req('/admin/me', {}, true),
 
+  adminListServices: () => req('/admin/services', {}, true),
   adminCreateService: (body: any) => req('/admin/services', { method: 'POST', body: JSON.stringify(body) }, true),
   adminUpdateService: (id: string, body: any) => req(`/admin/services/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteService: (id: string) => req(`/admin/services/${id}`, { method: 'DELETE' }, true),
 
+  adminListZones: () => req('/admin/zones', {}, true),
   adminCreateZone: (body: any) => req('/admin/zones', { method: 'POST', body: JSON.stringify(body) }, true),
   adminUpdateZone: (id: string, body: any) => req(`/admin/zones/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteZone: (id: string) => req(`/admin/zones/${id}`, { method: 'DELETE' }, true),
 
+  adminListFaqs: () => req('/admin/faqs', {}, true),
   adminCreateFaq: (body: any) => req('/admin/faqs', { method: 'POST', body: JSON.stringify(body) }, true),
   adminUpdateFaq: (id: string, body: any) => req(`/admin/faqs/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteFaq: (id: string) => req(`/admin/faqs/${id}`, { method: 'DELETE' }, true),
@@ -74,32 +106,33 @@ export const api = {
   adminDeleteTestimonial: (id: string) => req(`/admin/testimonials/${id}`, { method: 'DELETE' }, true),
 
   adminBookings: () => req('/admin/bookings', {}, true),
+  adminUpdateBookingStatus: (id: string, status: BookingStatus, note = '') =>
+    req(`/admin/bookings/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, note }) }, true),
+  adminRescheduleBooking: (id: string, date: string, time: string) =>
+    req(`/admin/bookings/${id}/reschedule`, { method: 'PUT', body: JSON.stringify({ date, time }) }, true),
   adminUpdateSiteSettings: (body: any) => req('/admin/site-settings', { method: 'PUT', body: JSON.stringify(body) }, true),
   adminUpdateBookingSettings: (body: any) => req('/admin/booking-settings', { method: 'PUT', body: JSON.stringify(body) }, true),
   changePassword: (current_password: string, new_password: string) =>
     req('/admin/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }, true),
 
-  listMedia: (category?: string) => req(`/media${category ? `?category=${category}` : ''}`),
+  listMedia: (category?: string) => req(`/media${category ? `?category=${encodeURIComponent(category)}` : ''}`),
   adminListMedia: () => req('/admin/media', {}, true),
   adminUpdateMedia: (id: string, body: any) => req(`/admin/media/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteMedia: (id: string) => req(`/admin/media/${id}`, { method: 'DELETE' }, true),
 
   contentBlocks: () => req('/content-blocks'),
-  contentBlock: (key: string) => req(`/content-blocks/${key}`),
+  contentBlock: (key: string) => req(`/content-blocks/${encodeURIComponent(key)}`),
   adminUpdateContentBlock: (key: string, body: any) =>
-    req(`/admin/content-blocks/${key}`, { method: 'PUT', body: JSON.stringify(body) }, true),
+    req(`/admin/content-blocks/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(body) }, true),
 
   adminListClients: () => req('/admin/clients', {}, true),
   adminGetClient: (id: string) => req(`/admin/clients/${id}`, {}, true),
-  adminUpdateClient: (id: string, body: any) =>
-    req(`/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
+  adminUpdateClient: (id: string, body: any) => req(`/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
   adminDeleteClient: (id: string) => req(`/admin/clients/${id}`, { method: 'DELETE' }, true),
 
   uploadMedia: async (uri: string, filename: string, mimeType: string, category: string) => {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await storageGet(TOKEN_KEY);
     const form = new FormData();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Platform } = require('react-native');
     if (Platform.OS === 'web') {
       const blob = await (await fetch(uri)).blob();
       form.append('file', blob, filename);
@@ -107,13 +140,11 @@ export const api = {
       form.append('file', { uri, name: filename, type: mimeType } as any);
     }
     const res = await fetch(`${API}/admin/upload?category=${encodeURIComponent(category)}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form as any,
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form as any,
     });
     if (!res.ok) {
-      const t = await res.text();
-      let msg = t; try { msg = JSON.parse(t).detail || t; } catch {}
+      const text = await res.text();
+      let msg = text; try { msg = JSON.parse(text).detail || text; } catch {}
       throw new Error(msg || `HTTP ${res.status}`);
     }
     return res.json();
@@ -126,11 +157,8 @@ export function absoluteMediaUrl(path?: string | null) {
   return `${BASE}${path}`;
 }
 
-export type Service = {
-  id: string; name: string; slug: string; short_description: string; full_description: string;
-  price: number; currency: string; duration_minutes: number; buffer_minutes: number;
-  active: boolean; display_order: number;
-};
+export type BookingStatus = 'pending_confirmation' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+export type Service = { id: string; name: string; slug: string; short_description: string; full_description: string; price: number; currency: string; duration_minutes: number; buffer_minutes: number; active: boolean; display_order: number; };
 export type Zone = { id: string; neighborhood: string; featured: boolean; surcharge_amount?: number | null; surcharge_status: string; message: string; active: boolean; display_order: number; };
 export type Faq = { id: string; question: string; answer: string; category: string; pending_confirmation: boolean; active: boolean; display_order: number; };
 export type Testimonial = { id: string; display_name: string; service_name: string; content: string; permission_confirmed: boolean; active: boolean; display_order: number; };

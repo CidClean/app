@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 
-import { colors, spacing, type, fonts, radius } from '@/src/theme';
+import { colors, spacing, type, fonts } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { api } from '@/src/api';
 
@@ -18,13 +18,16 @@ export default function AdminLogin() {
 
   const submit = async () => {
     setError(null);
-    if (!email.trim() || !password) { setError('Ingresa correo y contraseña.'); return; }
+    if (!email.trim() || !password) {
+      setError('Ingresa correo y contraseña.');
+      return;
+    }
     setLoading(true);
     try {
       await api.login(email.trim(), password);
       router.replace('/admin/dashboard');
-    } catch (e: any) {
-      setError('Credenciales inválidas.');
+    } catch {
+      setError('Credenciales inválidas o acceso temporalmente bloqueado.');
     } finally {
       setLoading(false);
     }
@@ -33,16 +36,18 @@ export default function AdminLogin() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.paper }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} testID="admin-back-btn"><Feather name="arrow-left" size={22} color={colors.ink} /></Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={10} testID="admin-back-btn">
+          <Feather name="arrow-left" size={22} color={colors.ink} />
+        </Pressable>
         <Text style={styles.brand}>Panel</Text>
         <View style={{ width: 22 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
         <View style={{ marginTop: spacing.huge }}>
           <Text style={type.eyebrow}>ADMINISTRACIÓN</Text>
-          <Text style={[type.h2, { marginTop: spacing.md }]}>Panel privado{'\n'}de Miguel Suárez.</Text>
+          <Text style={[type.h2, { marginTop: spacing.md }]}>Reservas y contenido{'\n'}de Miguel Suárez.</Text>
           <Text style={[type.body, { marginTop: spacing.md }]}>
-            Ingresa con el correo autorizado para editar servicios, zonas, preguntas y reseñas.
+            Ingresa con el correo autorizado para confirmar citas, administrar clientes y actualizar el sitio.
           </Text>
         </View>
         <View style={{ marginTop: spacing.xxl }}>
@@ -51,6 +56,7 @@ export default function AdminLogin() {
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
             style={styles.input}
             placeholderTextColor={colors.inkSoft}
@@ -62,6 +68,8 @@ export default function AdminLogin() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPwd}
+              autoCapitalize="none"
+              autoCorrect={false}
               style={[styles.input, { paddingRight: 34 }]}
               placeholderTextColor={colors.inkSoft}
               testID="admin-password-input"

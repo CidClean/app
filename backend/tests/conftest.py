@@ -1,18 +1,23 @@
 import os
-import pytest
-import requests
 from datetime import date, timedelta
 from pathlib import Path
+
+import pytest
+import requests
 from dotenv import load_dotenv
 
-# Load frontend .env to grab public backend URL
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 load_dotenv(Path(__file__).resolve().parents[2] / "frontend" / ".env")
 
-BASE_URL = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or os.environ["EXPO_BACKEND_URL"]).rstrip("/")
-API = f"{BASE_URL}/api"
+BASE_URL = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or os.environ.get("EXPO_BACKEND_URL") or "").rstrip("/")
+if not BASE_URL:
+    raise RuntimeError("Set EXPO_PUBLIC_BACKEND_URL or EXPO_BACKEND_URL before running integration tests")
 
-ADMIN_EMAIL = "Suarezmaiky25@gmail.com"
-ADMIN_PASSWORD = "Miguel2026!"
+API = f"{BASE_URL}/api"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL") or os.environ.get("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD") or os.environ.get("ADMIN_INITIAL_PASSWORD")
+if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+    raise RuntimeError("Set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD for integration tests")
 
 
 @pytest.fixture(scope="session")
@@ -22,17 +27,19 @@ def api_base():
 
 @pytest.fixture(scope="session")
 def api_client():
-    s = requests.Session()
-    s.headers.update({"Content-Type": "application/json"})
-    return s
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json"})
+    return session
 
 
 @pytest.fixture(scope="session")
 def admin_token(api_client):
-    r = api_client.post(f"{API}/admin/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
-    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
-    token = r.json()["token"]
-    return token
+    response = api_client.post(
+        f"{API}/admin/login",
+        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+    )
+    assert response.status_code == 200, f"Admin login failed: {response.status_code} {response.text}"
+    return response.json()["token"]
 
 
 @pytest.fixture(scope="session")
@@ -43,12 +50,10 @@ def auth_headers(admin_token):
 @pytest.fixture(scope="session")
 def next_sunday_str():
     today = date.today()
-    # weekday: Mon=0..Sun=6 -> days until Sunday
     days_ahead = (6 - today.weekday()) % 7
     if days_ahead == 0:
-        days_ahead = 7  # ensure future Sunday, not today
-    target = today + timedelta(days=days_ahead)
-    return target.strftime("%Y-%m-%d")
+        days_ahead = 7
+    return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
 
 
 @pytest.fixture(scope="session")
