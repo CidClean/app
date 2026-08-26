@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Response
 from fastapi.security import HTTPBearer
+from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,6 +8,7 @@ import os
 import logging
 import uuid
 import jwt
+import requests
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
@@ -21,6 +23,11 @@ DB_NAME = os.environ['DB_NAME']
 JWT_SECRET = os.environ['JWT_SECRET']
 ADMIN_EMAIL = os.environ['ADMIN_EMAIL']
 ADMIN_INITIAL_PASSWORD = os.environ['ADMIN_INITIAL_PASSWORD']
+EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "miguel-suarez-barber"
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -163,6 +170,8 @@ class Booking(BaseModel):
     address: str
     neighborhood: str
     note: str = ""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     accepted_policies: bool
     status: str = "pending_confirmation"
     created_at: str = Field(default_factory=now_iso)
@@ -176,6 +185,8 @@ class BookingInput(BaseModel):
     address: str
     neighborhood: str
     note: str = ""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     accepted_policies: bool
 
 class ContentBlock(BaseModel):
@@ -198,6 +209,8 @@ class SiteSettings(BaseModel):
     instagram: str = ""
     facebook: str = ""
     booking_url: str = ""  # future Cal.com URL
+    hero_image_url: str = ""
+    about_image_url: str = ""
 
 class SiteSettingsInput(BaseModel):
     business_name: Optional[str] = None
@@ -211,6 +224,8 @@ class SiteSettingsInput(BaseModel):
     instagram: Optional[str] = None
     facebook: Optional[str] = None
     booking_url: Optional[str] = None
+    hero_image_url: Optional[str] = None
+    about_image_url: Optional[str] = None
 
 class LoginInput(BaseModel):
     email: EmailStr
@@ -290,6 +305,12 @@ async def seed():
 @app.on_event("startup")
 async def on_startup():
     await seed()
+    # Try to warm up storage key (non-fatal)
+    if EMERGENT_LLM_KEY:
+        try:
+            await run_in_threadpool(_init_storage_sync)
+        except Exception as e:
+            logging.warning(f"Storage init warmup failed (will retry on first upload): {e}")
 
 # ---------- Public endpoints ----------
 
@@ -435,6 +456,8 @@ async def create_booking(payload: BookingInput):
         address=payload.address.strip(),
         neighborhood=payload.neighborhood.strip(),
         note=payload.note.strip(),
+        latitude=payload.latitude,
+        longitude=payload.longitude,
         accepted_policies=True,
     )
     await db.bookings.insert_one(booking.model_dump())
@@ -581,6 +604,144 @@ async def update_booking_settings(payload: BookingSettingsInput, email: str = De
             await db.booking_settings.insert_one(merged)
     s = await db.booking_settings.find_one({}, {"_id": 0})
     return s
+
+# ---------- Change password ----------
+
+class ChangePasswordInput(BaseModel):
+    current_password: str
+    new_password: str
+
+@api.post("/admin/change-password")
+async def change_password(payload: ChangePasswordInput, email: str = Depends(require_admin)):
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres")
+    user = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    if not user or not pwd_context.verify(payload.current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
+    new_hash = pwd_context.hash(payload.new_password)
+    await db.admin_users.update_one({"email": email}, {"$set": {"password_hash": new_hash, "password_updated_at": now_iso()}})
+    await db.admin_audit.insert_one({"id": str(uuid.uuid4()), "user_email": email, "action": "change_password", "entity_type": "admin_user", "entity_id": email, "summary": "", "created_at": now_iso()})
+    return {"ok": True}
+
+# ---------- Object storage ----------
+
+_storage_key: Optional[str] = None
+
+def _init_storage_sync() -> str:
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Storage not configured")
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_LLM_KEY}, timeout=30)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Storage init failed: {resp.status_code}")
+    _storage_key = resp.json()["storage_key"]
+    return _storage_key
+
+def _put_object_sync(path: str, data: bytes, content_type: str, retry: bool = True) -> dict:
+    global _storage_key
+    key = _init_storage_sync()
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120,
+    )
+    if resp.status_code == 503 and retry:
+        _storage_key = None
+        return _put_object_sync(path, data, content_type, retry=False)
+    if resp.status_code == 402:
+        raise HTTPException(status_code=402, detail="Sin créditos para subir archivos")
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Storage put failed: {resp.status_code}")
+    return resp.json()
+
+def _get_object_sync(path: str) -> tuple[bytes, str]:
+    key = _init_storage_sync()
+    resp = requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key}, timeout=60,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+@api.post("/admin/upload")
+async def upload_media(
+    file: UploadFile = File(...),
+    category: str = "gallery",
+    email: str = Depends(require_admin),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Solo se permiten imágenes")
+    contents = await file.read()
+    if len(contents) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Imagen demasiado grande (máx 8 MB)")
+    ext = (file.filename or "img").split(".")[-1].lower() if "." in (file.filename or "") else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "webp", "heic"):
+        ext = "jpg"
+    file_uuid = str(uuid.uuid4())
+    path = f"{APP_NAME}/uploads/admin/{file_uuid}.{ext}"
+    await run_in_threadpool(_put_object_sync, path, contents, file.content_type)
+    media_id = str(uuid.uuid4())
+    doc = {
+        "id": media_id,
+        "storage_path": path,
+        "file_url": f"/api/files/{path}",
+        "content_type": file.content_type,
+        "size": len(contents),
+        "category": category,
+        "alt_text": "",
+        "active": True,
+        "display_order": 0,
+        "created_at": now_iso(),
+        "uploaded_by": email,
+    }
+    await db.media.insert_one(doc.copy())
+    doc.pop("_id", None)
+    return doc
+
+@api.get("/files/{path:path}")
+async def get_file(path: str):
+    content, ct = await run_in_threadpool(_get_object_sync, path)
+    return Response(content=content, media_type=ct, headers={"Cache-Control": "public, max-age=31536000"})
+
+@api.get("/media")
+async def list_media(category: Optional[str] = None):
+    q: Dict[str, Any] = {"active": True}
+    if category:
+        q["category"] = category
+    items = await db.media.find(q, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(500)
+    return items
+
+@api.get("/admin/media")
+async def admin_list_media(email: str = Depends(require_admin)):
+    items = await db.media.find({}, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(500)
+    return items
+
+class MediaUpdateInput(BaseModel):
+    alt_text: Optional[str] = None
+    category: Optional[str] = None
+    active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+@api.put("/admin/media/{mid}")
+async def update_media(mid: str, payload: MediaUpdateInput, email: str = Depends(require_admin)):
+    upd = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not upd:
+        return {"ok": True}
+    r = await db.media.update_one({"id": mid}, {"$set": upd})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Media no encontrada")
+    return {"ok": True}
+
+@api.delete("/admin/media/{mid}")
+async def delete_media(mid: str, email: str = Depends(require_admin)):
+    # Soft-delete: mark inactive (storage API has no delete)
+    r = await db.media.update_one({"id": mid}, {"$set": {"active": False}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Media no encontrada")
+    return {"ok": True}
 
 app.include_router(api)
 

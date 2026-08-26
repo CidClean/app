@@ -76,7 +76,43 @@ export const api = {
   adminBookings: () => req('/admin/bookings', {}, true),
   adminUpdateSiteSettings: (body: any) => req('/admin/site-settings', { method: 'PUT', body: JSON.stringify(body) }, true),
   adminUpdateBookingSettings: (body: any) => req('/admin/booking-settings', { method: 'PUT', body: JSON.stringify(body) }, true),
+  changePassword: (current_password: string, new_password: string) =>
+    req('/admin/change-password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }, true),
+
+  listMedia: (category?: string) => req(`/media${category ? `?category=${category}` : ''}`),
+  adminListMedia: () => req('/admin/media', {}, true),
+  adminUpdateMedia: (id: string, body: any) => req(`/admin/media/${id}`, { method: 'PUT', body: JSON.stringify(body) }, true),
+  adminDeleteMedia: (id: string) => req(`/admin/media/${id}`, { method: 'DELETE' }, true),
+  uploadMedia: async (uri: string, filename: string, mimeType: string, category: string) => {
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const form = new FormData();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Platform } = require('react-native');
+    if (Platform.OS === 'web') {
+      const blob = await (await fetch(uri)).blob();
+      form.append('file', blob, filename);
+    } else {
+      form.append('file', { uri, name: filename, type: mimeType } as any);
+    }
+    const res = await fetch(`${API}/admin/upload?category=${encodeURIComponent(category)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form as any,
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      let msg = t; try { msg = JSON.parse(t).detail || t; } catch {}
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
 };
+
+export function absoluteMediaUrl(path?: string | null) {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `${BASE}${path}`;
+}
 
 export type Service = {
   id: string; name: string; slug: string; short_description: string; full_description: string;
@@ -86,4 +122,5 @@ export type Service = {
 export type Zone = { id: string; neighborhood: string; featured: boolean; surcharge_amount?: number | null; surcharge_status: string; message: string; active: boolean; display_order: number; };
 export type Faq = { id: string; question: string; answer: string; category: string; pending_confirmation: boolean; active: boolean; display_order: number; };
 export type Testimonial = { id: string; display_name: string; service_name: string; content: string; permission_confirmed: boolean; active: boolean; display_order: number; };
-export type SiteSettings = { business_name: string; full_name: string; descriptor: string; slogan: string; phone: string; whatsapp: string; email: string; city: string; instagram: string; facebook: string; booking_url: string; };
+export type SiteSettings = { business_name: string; full_name: string; descriptor: string; slogan: string; phone: string; whatsapp: string; email: string; city: string; instagram: string; facebook: string; booking_url: string; hero_image_url: string; about_image_url: string; };
+export type Media = { id: string; storage_path: string; file_url: string; content_type: string; size: number; category: string; alt_text: string; active: boolean; display_order: number; created_at: string; };

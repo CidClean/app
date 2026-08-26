@@ -10,13 +10,11 @@ import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
 import { Accordion } from '@/src/components/Accordion';
-import { api, Faq, SiteSettings, Testimonial, Zone } from '@/src/api';
+import { api, Faq, Media, SiteSettings, Testimonial, Zone, absoluteMediaUrl } from '@/src/api';
 import { openWhatsApp, waMessages } from '@/src/contact';
 
-const HERO_IMG = 'https://images.unsplash.com/photo-1599834562135-b6fc90e642ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85';
-const ABOUT_IMG = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHw0fHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85';
-
-const STEPS = [
+const HERO_IMG_FALLBACK = 'https://images.unsplash.com/photo-1599834562135-b6fc90e642ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85';
+const ABOUT_IMG = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHw0fHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85';const STEPS = [
   { n: '01', t: 'Elige tu servicio', d: 'Revisa precios, duración y características.' },
   { n: '02', t: 'Reserva o contacta', d: 'Reserva automáticamente o escribe por WhatsApp para otro horario.' },
   { n: '03', t: 'Confirma la ubicación', d: 'Miguel revisará la dirección, colonia, acceso y posible recargo.' },
@@ -59,7 +57,7 @@ export default function Home() {
       >
         {/* Hero */}
         <View style={styles.hero}>
-          <Image source={{ uri: HERO_IMG }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          <Image source={{ uri: absoluteMediaUrl(settings?.hero_image_url) || HERO_IMG_FALLBACK }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           <LinearGradient
             colors={['rgba(17,17,14,0.05)', 'rgba(17,17,14,0.55)', 'rgba(17,17,14,0.92)']}
             style={StyleSheet.absoluteFillObject}

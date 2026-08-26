@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
+import { LocationPicker } from '@/src/components/LocationPicker';
 import { api, Service } from '@/src/api';
 import { openWhatsApp, waMessages } from '@/src/contact';
 
@@ -33,6 +34,7 @@ export default function Book() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', address: '', neighborhood: '', note: '', accept: false });
+  const [pin, setPin] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +101,8 @@ export default function Book() {
         address: form.address,
         neighborhood: form.neighborhood,
         note: form.note,
+        latitude: pin.lat,
+        longitude: pin.lng,
         accepted_policies: form.accept,
       });
       setConfirmed(r);
@@ -134,7 +138,7 @@ export default function Book() {
             label="Confirmar por WhatsApp"
             variant="whatsapp"
             onPress={() => openWhatsApp(
-              `Hola, Miguel. Acabo de reservar ${confirmed.booking.service_name} para el ${confirmed.booking.date} a las ${confirmed.booking.time}. Mi dirección es ${confirmed.booking.address}, colonia ${confirmed.booking.neighborhood}. ¿Podemos confirmar la ubicación?`
+              `Hola, Miguel. Acabo de reservar ${confirmed.booking.service_name} para el ${confirmed.booking.date} a las ${confirmed.booking.time}. Mi dirección es ${confirmed.booking.address}, colonia ${confirmed.booking.neighborhood}.${confirmed.booking.latitude ? ` Pin: https://www.google.com/maps/search/?api=1&query=${confirmed.booking.latitude},${confirmed.booking.longitude}` : ''} ¿Podemos confirmar la ubicación?`
             )}
             testID="confirm-wa-btn"
             style={{ marginTop: spacing.xl }}
@@ -146,6 +150,7 @@ export default function Book() {
             onPress={() => {
               setConfirmed(null); setStep(1); setSelected(null); setSelectedDate(null); setSelectedSlot(null);
               setForm({ name: '', phone: '', address: '', neighborhood: '', note: '', accept: false });
+              setPin({ lat: null, lng: null });
             }}
             style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
           />
@@ -276,6 +281,16 @@ export default function Book() {
             <Field label="Dirección completa" value={form.address} onChange={(v: string) => setForm({ ...form, address: v })} testID="input-address" />
             <Field label="Colonia" value={form.neighborhood} onChange={(v: string) => setForm({ ...form, neighborhood: v })} testID="input-neighborhood" />
             <Field label="Nota (opcional)" value={form.note} onChange={(v: string) => setForm({ ...form, note: v })} multiline testID="input-note" />
+
+            <LocationPicker
+              latitude={pin.lat}
+              longitude={pin.lng}
+              onChange={(la, lo) => {
+                if (isNaN(la) || isNaN(lo)) setPin({ lat: null, lng: null });
+                else setPin({ lat: la, lng: lo });
+              }}
+              testID="location-picker"
+            />
 
             <Pressable onPress={() => setForm({ ...form, accept: !form.accept })} style={styles.acceptRow} testID="accept-policies">
               <View style={[styles.checkbox, form.accept && { backgroundColor: colors.ink, borderColor: colors.ink }]}>

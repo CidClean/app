@@ -7,20 +7,22 @@ import { Feather } from '@expo/vector-icons';
 import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
-import { api, Service, Zone } from '@/src/api';
+import { api, Media, Service, Zone, absoluteMediaUrl } from '@/src/api';
 import { openWhatsApp, waMessages } from '@/src/contact';
+import { Image } from 'expo-image';
 
 export default function Services() {
   const insets = useSafeAreaInsets();
   const [services, setServices] = useState<Service[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [gallery, setGallery] = useState<Media[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
-        const [s, z] = await Promise.all([api.services(), api.zones()]);
-        setServices(s); setZones(z);
-      } catch (e) {}
+        const [s, z, g] = await Promise.all([api.services(), api.zones(), api.listMedia('gallery')]);
+        setServices(s); setZones(z); setGallery(g);
+      } catch { /* silent */ }
     })();
   }, []);
 
@@ -95,16 +97,28 @@ export default function Services() {
           />
         </View>
 
-        {/* Gallery placeholder */}
+        {/* Gallery */}
         <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.huge }}>
           <SectionHead eyebrow="Galería" title="Cortes, barbas y proceso." />
           <View style={styles.gallery}>
-            {[0, 1, 2, 3].map(i => (
-              <View key={i} style={styles.galleryItem}>
-                <Feather name="image" size={22} color={colors.inkSoft} />
-                <Text style={[type.micro, { marginTop: spacing.md }]}>FOTOGRAFÍA PENDIENTE</Text>
-              </View>
-            ))}
+            {gallery.length === 0 ? (
+              [0, 1, 2, 3].map(i => (
+                <View key={i} style={styles.galleryItem}>
+                  <Feather name="image" size={22} color={colors.inkSoft} />
+                  <Text style={[type.micro, { marginTop: spacing.md }]}>FOTOGRAFÍA PENDIENTE</Text>
+                </View>
+              ))
+            ) : (
+              gallery.map(m => (
+                <View key={m.id} style={styles.galleryItem}>
+                  <Image
+                    source={{ uri: absoluteMediaUrl(m.file_url) as string }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                  />
+                </View>
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
@@ -130,5 +144,5 @@ const styles = StyleSheet.create({
   zoneChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.white },
   zoneChipText: { fontFamily: fonts.sansBold, fontSize: 12, letterSpacing: 0.6, color: colors.ink },
   gallery: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  galleryItem: { width: '48%', aspectRatio: 1, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  galleryItem: { width: '48%', aspectRatio: 1, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, overflow: 'hidden' },
 });

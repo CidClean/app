@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, RefreshControl, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, RefreshControl, Switch, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 
 import { colors, spacing, type, fonts, radius } from '@/src/theme';
 import { PillButton } from '@/src/components/PillButton';
 import { SectionHead } from '@/src/components/SectionHead';
-import { api, Service, Zone, Faq, Testimonial } from '@/src/api';
+import { api, Service, Zone, Faq, Testimonial, Media, absoluteMediaUrl } from '@/src/api';
 
-type Tab = 'inicio' | 'servicios' | 'zonas' | 'faqs' | 'resenas' | 'ajustes';
+type Tab = 'inicio' | 'servicios' | 'zonas' | 'faqs' | 'resenas' | 'fotos' | 'ajustes' | 'cuenta';
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
@@ -49,7 +51,7 @@ export default function Dashboard() {
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsRow} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-        {(['inicio','servicios','zonas','faqs','resenas','ajustes'] as Tab[]).map(t => (
+        {(['inicio','servicios','zonas','faqs','resenas','fotos','ajustes','cuenta'] as Tab[]).map(t => (
           <Pressable key={t} onPress={() => setTab(t)} style={[styles.tabChip, tab === t && styles.tabChipActive]} testID={`tab-${t}`}>
             <Text style={[styles.tabText, tab === t && { color: colors.paper }]}>{labelFor(t)}</Text>
           </Pressable>
@@ -61,14 +63,16 @@ export default function Dashboard() {
         {tab === 'zonas' && <ZonesTab />}
         {tab === 'faqs' && <FaqsTab />}
         {tab === 'resenas' && <TestimonialsTab />}
+        {tab === 'fotos' && <MediaTab />}
         {tab === 'ajustes' && <SettingsTab />}
+        {tab === 'cuenta' && <AccountTab />}
       </View>
     </View>
   );
 }
 
 function labelFor(t: Tab) {
-  const m: any = { inicio: 'Inicio', servicios: 'Servicios', zonas: 'Zonas', faqs: 'Preguntas', resenas: 'Reseñas', ajustes: 'Ajustes' };
+  const m: any = { inicio: 'Inicio', servicios: 'Servicios', zonas: 'Zonas', faqs: 'Preguntas', resenas: 'Reseñas', fotos: 'Fotos', ajustes: 'Ajustes', cuenta: 'Cuenta' };
   return m[t];
 }
 
@@ -466,12 +470,143 @@ function SettingsTab() {
   );
 }
 
-function FormField({ label, value, onChange, keyboardType, multiline }: any) {
+function FormField({ label, value, onChange, keyboardType, multiline, secure }: any) {
   return (
     <View style={{ marginTop: spacing.md }}>
       <Text style={styles.formLabel}>{label.toUpperCase()}</Text>
-      <TextInput value={value} onChangeText={onChange} keyboardType={keyboardType} multiline={multiline} style={[styles.formInput, multiline && { minHeight: 60, textAlignVertical: 'top' }]} placeholderTextColor={colors.inkSoft} />
+      <TextInput value={value} onChangeText={onChange} keyboardType={keyboardType} multiline={multiline} secureTextEntry={secure} style={[styles.formInput, multiline && { minHeight: 60, textAlignVertical: 'top' }]} placeholderTextColor={colors.inkSoft} />
     </View>
+  );
+}
+
+function MediaTab() {
+  const [items, setItems] = useState<Media[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [category, setCategory] = useState<'gallery' | 'hero' | 'about'>('gallery');
+
+  const load = async () => {
+    try { setItems(await api.adminListMedia()); } catch {}
+  };
+  useEffect(() => { load(); }, []);
+
+  const pickAndUpload = async () => {
+    try {
+      const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        if (perm.canAskAgain) {
+          const r = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (r.status !== 'granted') { alert('Permiso denegado'); return; }
+        } else { alert('Habilita el acceso a fotos en Ajustes'); return; }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const a = res.assets[0];
+      const name = a.fileName || `photo-${Date.now()}.jpg`;
+      const mime = a.mimeType || 'image/jpeg';
+      setBusy(true);
+      await api.uploadMedia(a.uri, name, mime, category);
+      await load();
+    } catch (e: any) {
+      alert(e.message || 'Error al subir la imagen');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setAsHero = async (m: Media) => {
+    try { await api.adminUpdateSiteSettings({ hero_image_url: m.file_url }); alert('Actualizado como imagen principal'); }
+    catch (e: any) { alert(e.message); }
+  };
+  const setAsAbout = async (m: Media) => {
+    try { await api.adminUpdateSiteSettings({ about_image_url: m.file_url }); alert('Actualizada como retrato de Miguel'); }
+    catch (e: any) { alert(e.message); }
+  };
+  const toggleActive = async (m: Media) => {
+    try { await api.adminUpdateMedia(m.id, { active: !m.active }); await load(); }
+    catch (e: any) { alert(e.message); }
+  };
+  const remove = async (m: Media) => {
+    try { await api.adminDeleteMedia(m.id); await load(); }
+    catch (e: any) { alert(e.message); }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 120 }}>
+      <SectionHead eyebrow="Fotos" title="Galería y hero" />
+      <Text style={[type.small, { marginBottom: spacing.md }]}>Elige una categoría antes de subir. Después puedes marcar una foto como principal (hero) o como retrato de Miguel.</Text>
+      <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', marginBottom: spacing.md }}>
+        {(['gallery','hero','about'] as const).map(c => (
+          <Pressable key={c} onPress={() => setCategory(c)} style={[styles.tabChip, category === c && styles.tabChipActive]}>
+            <Text style={[styles.tabText, category === c && { color: colors.paper }]}>{c === 'gallery' ? 'GALERÍA' : c === 'hero' ? 'HERO' : 'MIGUEL'}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <PillButton label={busy ? 'Subiendo…' : 'Subir foto'} onPress={pickAndUpload} loading={busy} testID="admin-upload-photo-btn" />
+      <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
+        {items.length === 0 ? (
+          <View style={styles.empty}><Text style={type.body}>Aún no has subido fotos.</Text></View>
+        ) : items.map(m => (
+          <View key={m.id} style={styles.mediaCard}>
+            <View style={styles.mediaThumb}>
+              <Image source={{ uri: absoluteMediaUrl(m.file_url) as string }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.micro, { color: colors.bronze }]}>{m.category.toUpperCase()} · {m.active ? 'VISIBLE' : 'OCULTA'}</Text>
+              <Text style={[type.small, { marginTop: 4 }]} numberOfLines={1}>{m.storage_path.split('/').pop()}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                <Pressable onPress={() => setAsHero(m)}><Text style={styles.mediaAction}>USAR EN HERO</Text></Pressable>
+                <Pressable onPress={() => setAsAbout(m)}><Text style={styles.mediaAction}>USAR EN MIGUEL</Text></Pressable>
+                <Pressable onPress={() => toggleActive(m)}><Text style={styles.mediaAction}>{m.active ? 'OCULTAR' : 'MOSTRAR'}</Text></Pressable>
+                <Pressable onPress={() => remove(m)}><Text style={[styles.mediaAction, { color: colors.danger }]}>ELIMINAR</Text></Pressable>
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function AccountTab() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setMsg(null); setErr(null);
+    if (!current || !next) { setErr('Completa ambos campos.'); return; }
+    if (next.length < 8) { setErr('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+    if (next !== confirm) { setErr('La confirmación no coincide.'); return; }
+    setBusy(true);
+    try {
+      await api.changePassword(current, next);
+      setMsg('Contraseña actualizada. Se recomienda cerrar sesión y volver a entrar.');
+      setCurrent(''); setNext(''); setConfirm('');
+    } catch (e: any) {
+      setErr(e.message || 'Error al actualizar');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+      <SectionHead eyebrow="Cuenta" title="Cambiar contraseña" />
+      <Text style={[type.small, { marginBottom: spacing.md }]}>
+        Elige una nueva contraseña. Miguel es el único con acceso al panel; te recomendamos usar al menos 8 caracteres con letras y números.
+      </Text>
+      <FormField label="Contraseña actual" value={current} onChange={setCurrent} secure />
+      <FormField label="Nueva contraseña" value={next} onChange={setNext} secure />
+      <FormField label="Confirmar nueva contraseña" value={confirm} onChange={setConfirm} secure />
+      {err ? <Text style={[type.small, { color: colors.danger, marginTop: spacing.md }]}>{err}</Text> : null}
+      {msg ? <Text style={[type.micro, { color: colors.bronze, marginTop: spacing.md }]}>{msg.toUpperCase()}</Text> : null}
+      <PillButton label="Actualizar contraseña" onPress={submit} loading={busy} style={{ marginTop: spacing.xl }} testID="save-password-btn" />
+    </ScrollView>
   );
 }
 
@@ -493,4 +628,7 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.md },
   dayToggle: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
   dayToggleText: { fontFamily: fonts.sansBold, fontSize: 11, letterSpacing: 0.8, color: colors.ink },
+  mediaCard: { flexDirection: 'row', gap: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: radius.md },
+  mediaThumb: { width: 76, height: 76, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.paperDeep },
+  mediaAction: { fontFamily: fonts.sansBold, fontSize: 10, letterSpacing: 0.8, color: colors.ink, paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line },
 });

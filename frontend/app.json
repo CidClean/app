@@ -10,7 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.miguelbarber.qfw85t"
+      "bundleIdentifier": "com.emergent.miguelbarber.qfw85t",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Sube fotos para la galería o el hero del sitio",
+        "NSCameraUsageDescription": "Toma fotos para la galería del sitio",
+        "NSLocationWhenInUseUsageDescription": "Marca la ubicación exacta para tu cita a domicilio"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +23,13 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.miguelbarber.qfw85t"
+      "package": "com.emergent.miguelbarber.qfw85t",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -37,7 +48,20 @@
         }
       ],
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La app accede a tus fotos para subir imágenes al sitio de Miguel Suárez.",
+          "cameraPermission": "La app usa la cámara para tomar fotos del portafolio."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Marca la ubicación exacta para tu cita a domicilio."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

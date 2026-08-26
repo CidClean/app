@@ -1,0 +1,51 @@
+{
+  "summary": "Backend re-tested against public URL (https://miguel-barber.preview.emergentagent.com/api). 31/31 tests passed (100%). New features verified: (1) POST /api/admin/change-password — all 4 cases pass: no-token→401, wrong-current→401, <8 chars→400, success→200 (login with new pw works, old pw returns 401, then reverted back to Miguel2026! and re-verified). (2) Emergent Object Storage integration works end-to-end: POST /api/admin/upload requires auth (401 w/o token), rejects non-image (400), accepts a real 4x4 PNG (multipart, category=gallery) → returns doc with id, storage_path, file_url (starts with /api/files/), content_type=image/png, size, category=gallery, active=true, no _id. (3) GET /api/files/{storage_path} returns exact PNG bytes with matching content-type. (4) GET /api/media?category=gallery returns only active items; after DELETE, item disappears from public but is still visible in /api/admin/media with active=false; PUT /api/admin/media/{id} updates alt_text and active. (5) PUT /api/admin/site-settings persists hero_image_url + about_image_url and public GET reflects them. (6) POST /api/bookings accepts optional latitude/longitude and they are persisted (verified via /api/admin/bookings). Regression: previously-broken POST /api/admin/services (500 slug TypeError) is now FIXED — full create→update→delete flow passes. All prior tests (services/zones/faqs/policies/testimonials/booking-settings/available-slots/admin login/me/booking CRUD) still pass. Admin password confirmed back to Miguel2026! after tests. TEST bookings + TEST media rows cleaned up in MongoDB.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/files/{path}",
+        "issue": "Backend correctly sets Cache-Control: public, max-age=31536000, but the preview ingress/Cloudflare rewrites it to `no-store, no-cache, must-revalidate`. Not a backend bug — user browsers hitting the deployment URL will see the ingress header, so uploaded images will not be cached by CDN. If long-lived caching is important in production, the ingress config would need to be adjusted (out of scope of app code)."
+      },
+      {
+        "endpoint": "startup",
+        "issue": "passlib/bcrypt version warning still logged on startup ('trapped error reading bcrypt version'). Non-fatal; hashing/verification works."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_miguel_backend.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: silence passlib/bcrypt startup warning by pinning compatible versions in backend/requirements.txt.",
+    "Optional: if long-CDN-caching of uploaded images matters for production, adjust ingress/Cloudflare rules — /api/files/* is currently rewritten to no-store by the preview ingress."
+  ],
+  "critical_code_review_comments": [
+    "server.py:684 storage_path is `miguel-suarez-barber/uploads/admin/{uuid}.{ext}` — since /api/files/{path:path} passes the whole subpath to _get_object_sync, this works cleanly. Good.",
+    "server.py:669 upload endpoint reads the entire file into memory (await file.read()) then checks 8MB cap AFTER read. Safe for 8MB limit but a very large upload could still transiently consume memory before the 400 is returned. Acceptable given the cap.",
+    "server.py:704 GET /api/files/{path:path} has NO auth. Any user who knows/guesses a storage_path can fetch bytes — however paths are UUID-based so this is effectively unguessable. Acceptable, but consider documenting.",
+    "server.py:738 DELETE /api/admin/media is soft-delete (sets active=False) since Emergent object storage has no delete API. Test coverage confirms admin still sees inactive items and public /api/media hides them. Good.",
+    "server.py:614 change-password revokes/rotates no existing JWT tokens — a token issued before the password change is still valid for 7 days. Low-severity for a single-admin app but worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new — 9 tests for change-password, media upload lifecycle, hero/about images, booking lat/lng)"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31)",
+    "frontend": "n/a (backend-only run)"
+  },
+  "seed_data_creation": "Created ephemeral: 1x PNG media item (deleted+purged from Mongo), 1x TEST_LatLng booking on next Sunday (purged from Mongo). Previous TEST_User bookings from iteration 1 also purged. Admin password: changed to TempTest2026! then reverted to Miguel2026! (confirmed by fresh login).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `cd /app/backend && pytest tests/ -v --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml`. Both test files (test_miguel_backend.py + test_new_features.py) use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env and creds from /app/memory/test_credentials.md. test_new_features.py creates a real 4x4 PNG on the fly (no external assets required) and exercises the Emergent object-storage integration end-to-end. If the storage integration warms slowly on a cold start, first upload may take a few seconds — the code has a 503-retry with key refresh built in.",
+  "rca_of_issue": "N/A — no failing tests in this iteration. Prior iteration bug (server.py duplicate `slug` kwarg on POST /api/admin/services) has been fixed by main agent and the create/update/delete admin-services flow now passes."
+}
