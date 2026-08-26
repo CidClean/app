@@ -130,6 +130,10 @@ export function AdminMenu({ current, onSelectSection }: Props) {
 
 const styles = StyleSheet.create({
   trigger: {
+    position: 'absolute',
+    right: spacing.xl,
+    bottom: spacing.md,
+    zIndex: 2,
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -137,10 +141,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginRight: spacing.sm,
-    transform: [{ translateX: -spacing.sm }],
-    flexShrink: 0,
     backgroundColor: colors.paper,
   },
   modalRoot: { flex: 1, flexDirection: 'row' },
