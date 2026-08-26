@@ -1,0 +1,168 @@
+{
+  "app_name": "Miguel Suárez - At-home Barber",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "An elegant, minimalist, and editorial mobile experience that frames at-home grooming as a premium bespoke service.",
+  "color": {
+    "surface": "#F4F1E9",
+    "onSurface": "#181815",
+    "surfaceSecondary": "#EBE5DA",
+    "onSurfaceSecondary": "#181815",
+    "surfaceTertiary": "#FFFDF8",
+    "onSurfaceTertiary": "#181815",
+    "surfaceInverse": "#181815",
+    "onSurfaceInverse": "#F4F1E9",
+    "brand": "#A4774D",
+    "brandPrimary": "#181815",
+    "onBrandPrimary": "#FFFDF8",
+    "brandSecondary": "#A4774D",
+    "onBrandSecondary": "#FFFDF8",
+    "brandTertiary": "#775336",
+    "onBrandTertiary": "#FFFDF8",
+    "success": "#1F8F55",
+    "onSuccess": "#FFFFFF",
+    "warning": "#A4774D",
+    "onWarning": "#FFFDF8",
+    "error": "#775336",
+    "onError": "#FFFDF8",
+    "info": "#3F3E38",
+    "onInfo": "#F4F1E9",
+    "border": "rgba(24,24,21,0.14)",
+    "borderStrong": "#181815",
+    "divider": "rgba(24,24,21,0.14)"
+  },
+  "typography": {
+    "displayFontFamily": "Italiana",
+    "textFontFamily": "DM Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 32,
+      "4xl": 40
+    }
+  },
+  "spacing": {
+    "rule": "Generous editorial whitespace. Let typography breathe. Use margins to isolate content blocks instead of heavy cards.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 0,
+    "md": 4,
+    "lg": 8,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [
+      "Use solid surfaceSecondary or brand tinted backgrounds instead of glass for this editorial style."
+    ],
+    "dont's": [
+      "No heavy blurs, keep it matte and paper-like."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Inicio",
+      "purpose": "Establish the premium brand narrative and build trust.",
+      "states": {
+        "loading": "Centered minimalist spinner with 'M' logo.",
+        "empty": "Not applicable for home screen.",
+        "error": "Elegant text message 'No se pudo cargar la información' with retry button."
+      },
+      "layout": "Sticky header with 'Miguel Suárez' in Italiana. Hero section: Full-width atmospheric grooming image with vertical gradient scrim, Italiana H1 'Precisión y estilo, donde tú estés' and pill-shaped primary CTA. Trust bar: 3 items in a horizontal scroll or spaced row. About: Portrait image with narrative text. Process: Vertical list with large editorial numbering (01., 02.) in Italiana. Reviews: Horizontal scroll of dark ink cards with a large transparent 'M' monogram background. FAQ: Minimalist accordion with thin 1px bottom borders."
+    },
+    {
+      "name": "Servicios",
+      "purpose": "Showcase offerings with clear pricing and zone information.",
+      "states": {
+        "loading": "Skeleton list of services.",
+        "empty": "No services available at the moment.",
+        "error": "Error loading services."
+      },
+      "layout": "List of services using generous vertical padding, separated by thin hairline borders. Each service has title, price, duration, and a 'Reservar' pill button. Packages section: Gradient bronze cards for Weddings/Groups. Zones: Simple text list or chips. Gallery: Minimalist grid of ambient photos or 'Fotografía pendiente' empty states."
+    },
+    {
+      "name": "Reservar",
+      "purpose": "Frictionless, conversion-focused booking flow.",
+      "states": {
+        "loading": "Loading available slots.",
+        "empty": "No available slots.",
+        "error": "Error completing reservation."
+      },
+      "layout": "Step-by-step flow (Service -> Date/Time -> Details). Use large touch targets for time slots. Form fields with labels above and thin bottom borders (no full boxes). Sticky 'Confirmar Reserva' button at the bottom above safe area."
+    },
+    {
+      "name": "Contacto",
+      "purpose": "Direct communication and policy information.",
+      "states": {
+        "loading": "Loading contact details.",
+        "empty": "N/A",
+        "error": "Error loading contact."
+      },
+      "layout": "Large WhatsApp button using the 'success' color (#1F8F55). List of policies and social links. Minimalist and spacious."
+    },
+    {
+      "name": "Admin (Hidden Route)",
+      "purpose": "Manage content, bookings, and services.",
+      "states": {
+        "loading": "Loading dashboard.",
+        "empty": "No recent bookings.",
+        "error": "Error accessing admin."
+      },
+      "layout": "Login screen with simple inputs. Dashboard with tabs to edit Services, Zones, FAQ, Reviews."
+    }
+  ],
+  "images": {
+    "hero_home": {
+      "url": "https://images.unsplash.com/photo-1599834562135-b6fc90e642ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Man portrait aesthetic"
+    },
+    "about_portrait": {
+      "url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHw0fHxtZW4lMjBwb3J0cmFpdCUyMHN0eWxlJTIwZ3Jvb21pbmclMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NTU5NTk0fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Man brooding portrait"
+    },
+    "process_texture": {
+      "url": "https://images.unsplash.com/photo-1521194263619-39ecc5b55c61?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwxfHxuZXV0cmFsJTIwYXJjaGl0ZWN0dXJhbCUyMHRleHR1cmV8ZW58MHx8fHwxNzgyNDcyMTI4fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Neutral architectural texture"
+    },
+    "package_background": {
+      "url": "https://images.unsplash.com/photo-1571829604981-ea159f94e5ad?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwxfHxsZWF0aGVyJTIwdGV4dHVyZSUyMGFlc3RoZXRpY3xlbnwwfHx8fDE3ODI3MDA5MTZ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Brown leather texture"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the 3 Editorial Mobile LIGHT personality. Use generous whitespace, hairline borders, and elegant serif typography.",
+    "Implement the sticky header with 'Miguel Suárez' in the Italiana font.",
+    "Use 'brandPrimary' (#181815) with 'pill' radius for primary buttons, creating an ink-colored pill CTA.",
+    "For the Process section, use large numbers (01., 02.) in the Italiana font to create an editorial numbering aesthetic.",
+    "Reviews section MUST use dark ink cards (`surfaceInverse`) with a large, low-opacity 'M' in the background.",
+    "Packages section MUST use a bronze gradient or the provided leather texture image for background.",
+    "Avoid ALL traditional barbershop icons (clippers, barber poles). Use minimalist icons from Feather, with stroke width 1 or 1.5.",
+    "Ensure the layout feels like a premium lifestyle magazine rather than a dense SaaS dashboard.",
+    "Ensure 'Reservar' is highly visible, ideally as a sticky CTA at the bottom of the screen or prominently in the header/tab bar.",
+    "DO NOT USE EMOJIS in the UI."
+  ]
+}

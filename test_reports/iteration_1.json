@@ -1,0 +1,57 @@
+{
+  "summary": "Backend tested end-to-end against public URL (https://miguel-barber.preview.emergentagent.com/api). 21/22 tests passed (95.5%). Seed data (5 services w/ correct prices+durations, 4 featured zones, 10 FAQs w/ 2 pending_confirmation, 11 policies), site/booking settings defaults, empty testimonials, available-slots on Sundays and closed on Mondays, all booking validations (policies=false→400, ends-after-close→400, non-open-day→400, conflict→409, happy path→200), admin auth (login OK, wrong pwd→401, /admin/me with/without token, /admin/bookings auth), admin booking-settings + site-settings updates all work and MongoDB _id never leaks in any response. One CRITICAL bug: POST /api/admin/services returns HTTP 500 due to Python TypeError 'got multiple values for keyword argument slug' at server.py:468.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/admin/services",
+        "issue": "Returns 500. Root cause: server.py line 468 does `Service(**payload.model_dump(), slug=payload.slug or _slugify(payload.name))`. Since ServiceInput already contains a `slug` field (Optional[str]=None), `model_dump()` puts `slug` in the kwargs dict AND you also pass `slug=` explicitly → TypeError: 'Service' got multiple values for keyword argument 'slug'. Fix: pop/replace slug first, e.g. `data = payload.model_dump(); data['slug'] = payload.slug or _slugify(payload.name); svc = Service(**data)`. Admin create-service is completely broken until this is fixed.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/bookings",
+        "issue": "There is no admin endpoint to delete/cancel bookings, so TEST bookings created during testing remain in the DB (name='TEST_User' on the next Sunday). Consider exposing DELETE /api/admin/bookings/{id} for cleanup, or manually remove the TEST_User booking(s)."
+      },
+      {
+        "endpoint": "backend startup",
+        "issue": "passlib warning at startup: 'trapped error reading bcrypt version — module bcrypt has no attribute __about__'. Non-fatal (bcrypt still works, login succeeds), but noisy. Pin passlib>=1.7.5 with bcrypt<4 OR upgrade to a passlib version compatible with newer bcrypt."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_miguel_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix POST /api/admin/services (server.py:468) — remove the duplicate `slug` kwarg. Suggested: `data = payload.model_dump(); data['slug'] = payload.slug or _slugify(payload.name); svc = Service(**data); await db.services.insert_one(svc.model_dump())`.",
+    "Clean up TEST_User booking(s) created on the next Sunday (or add an admin cancel/delete-booking endpoint used by tests).",
+    "Optional: silence passlib/bcrypt version warning by aligning versions in backend/requirements.txt."
+  ],
+  "critical_code_review_comments": [
+    "server.py:468 duplicate-kwarg TypeError (as above) — same pattern is safe elsewhere because other admin routes don't override a field already present in the Input model.",
+    "available-slots and create-booking treat local time as UTC-6 without DST handling — fine for Torreón/CST (no DST since 2022), but should be documented.",
+    "No pagination on admin/bookings — `.to_list(500)` will silently cap at 500 rows once bookings grow. Acceptable for MVP.",
+    "seed() runs on every startup and is idempotent by count; good. However site_settings and booking_settings are only created if the collection is empty — updates to defaults in code won't propagate to existing DBs. Acceptable but worth a comment."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/test_miguel_backend.py (new)"
+  ],
+  "success_rate": {
+    "backend": "95.5% (21/22)",
+    "frontend": "n/a (frontend testing not requested)"
+  },
+  "seed_data_creation": "Test created 1 booking on the next Sunday with name='TEST_User', phone='8711111111', neighborhood='Viñedos' (used for the happy-path booking + conflict test + admin/bookings persistence check). It remains in the DB because there is no admin delete-booking endpoint. All CRUD tests for services/booking-settings/site-settings restore state (deleted after create, open_days reset to [0], slogan reverted).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test file: /app/backend/tests/test_miguel_backend.py. Uses EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. Admin creds in /app/memory/test_credentials.md. Only remaining failure is TestAdminServicesCRUD::test_create_update_delete_service (500 on POST /api/admin/services). Re-run: `cd /app/backend && pytest tests/test_miguel_backend.py -v --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml`. Note: booking success test picks a middle slot from GET /api/available-slots, so it's date-agnostic and stable.",
+  "rca_of_issue": "Bug: POST /api/admin/services → 500. Reproduction: `curl -X POST $BASE/api/admin/services -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -d '{\"name\":\"X\",\"price\":100,\"duration_minutes\":30}'`. Traceback: TypeError: Service() got multiple values for keyword argument 'slug' at server.py:468. Root cause: `ServiceInput` declares `slug: Optional[str] = None`, so `payload.model_dump()` contains the key `slug`; expanding with `**` and then passing `slug=` again causes the collision. Mitigation shown in action_items."
+}
