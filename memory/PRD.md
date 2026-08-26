@@ -1,59 +1,70 @@
-# PRD — Miguel Suárez · Barbero a domicilio (App móvil Expo)
+# PRD — Miguel Suárez · Barbero a domicilio
 
 ## Contexto
-App móvil nativa (React Native + Expo + FastAPI + MongoDB) para **Miguel Ángel Suárez**, barbero profesional a domicilio en **Torreón, Coahuila**. Diseño editorial premium (Italiana serif + DM Sans), sin iconografía tradicional de barbería. La app funciona como sitio público + panel administrativo privado.
+Aplicación web responsive construida con Expo Router, React Native Web, FastAPI y MongoDB para **Miguel Ángel Suárez**, barbero profesional a domicilio en **Torreón, Coahuila**. El diseño es editorial y premium, sin iconografía tradicional de barbería. La aplicación funciona como sitio público y panel administrativo privado.
 
 ## Funcionalidades implementadas
 
-### App pública
-- **Inicio**: Hero editorial con foto atmosférica (reemplazable desde el panel), CTA a reservar + WhatsApp, storycard con monograma "M" sobre Miguel, proceso 5 pasos numerados, chips de zonas destacadas, tarjeta bronce para bodas/grupos, sección de reseñas con estado vacío, FAQ acordeón, footer oscuro.
-- **Servicios**: Catálogo con 5 servicios y precios en MXN, botones Reservar/WhatsApp, aviso de recargo, listado completo de zonas, **galería con fotos reales cuando Miguel las suba** (placeholders elegantes mientras tanto).
-- **Reservar**: Flujo en 3 pasos. En el paso 3, **mini-mapa integrado (LocationPicker)** para marcar la ubicación exacta:
-  - iOS/Android: mapa nativo con react-native-maps + expo-location. El cliente toca el mapa para poner un pin, o pulsa "Usar mi ubicación" con permisos progresivos (respeta canAskAgain).
-  - Web: iframe embebido con Google Maps + geolocation API del navegador.
-  - El pin (lat/lng) se envía al backend y aparece en el mensaje de WhatsApp de confirmación como enlace clickeable a Google Maps.
-- **Contacto**: WhatsApp verde, reservar, llamar, SMS, correo, Instagram/Facebook (placeholders), políticas, FAQ, panel admin.
-- **Políticas / FAQ**: pantallas dedicadas con contenido editable.
+### Sitio público
+- **Inicio**: hero editorial, CTA de reserva y WhatsApp, presentación de Miguel, proceso del servicio, zonas destacadas, bodas/grupos, reseñas, preguntas frecuentes y footer.
+- **Servicios**: catálogo con precios en MXN, botones de reserva/contacto, aviso de posibles recargos y zonas atendidas.
+- **Reservar**: flujo de tres pasos con selección de servicio, fecha, hora, datos del cliente, dirección y ubicación opcional.
+- **Contacto**: WhatsApp, llamada, SMS, correo, redes sociales, políticas y preguntas frecuentes.
+- **Políticas / FAQ**: pantallas dedicadas.
 
-### Panel administrativo (`/admin`)
-Autenticación bcrypt + JWT (7 días). Tabs:
-- **Inicio**: Lista de reservas recientes (incluye pin de ubicación si el cliente lo compartió).
-- **Servicios / Zonas / Preguntas / Reseñas**: CRUD completo con activar/desactivar y ordenar.
-- **Fotos** (NUEVO): Sube fotografías desde la galería o cámara del teléfono usando expo-image-picker. Categorías: Galería, Hero, Miguel. Cada foto puede marcarse como imagen principal del hero, retrato de Miguel, ocultarse o eliminarse. Almacenamiento en la nube via **Emergent Managed Object Storage** (imágenes ≤ 8 MB, JPG/PNG/WebP/HEIC).
-- **Ajustes**: Días abiertos (multi-selección), hora de apertura/cierre, aviso mínimo, intervalo de slots. Datos del negocio (nombre, eslogan, teléfono, WhatsApp, email, redes, URL Cal.com).
-- **Cuenta** (NUEVO): Cambiar la contraseña del admin sin tocar código. Requiere contraseña actual + confirmación de la nueva (mínimo 8 caracteres).
+### Panel administrativo
+- **Inicio**: listado de reservas.
+- **Servicios / Zonas / Preguntas / Reseñas**: administración del contenido.
+- **Clientes**: registro automático por teléfono, historial y notas privadas.
+- **Contenido**: edición del hero y la presentación de Miguel.
+- **Ajustes**: días y horarios disponibles, aviso mínimo, intervalo entre horarios y datos del negocio.
+- **Cuenta**: cambio de contraseña administrativa.
 
 ## Reglas de negocio
-- Precios y duraciones exactos: Corte 400/40, Barba 280/30, Corte+Barba 550/70, Corte+Barba+Facial 600/90, Corte Niño 300/40 (MXN).
-- Buffer operativo 20 min entre citas (no se cobra al cliente).
-- Última hora de inicio calculada según duración del servicio y hora de cierre.
-- Aviso mínimo 60 min por defecto (editable).
-- Pago al finalizar (efectivo/transferencia). No hay pago en línea.
-- No inventa reseñas, dirección física ni cargos.
+- Corte de cabello: $400 MXN / 40 min.
+- Barba: $280 MXN / 30 min.
+- Corte y barba: $550 MXN / 70 min.
+- Corte, barba y limpieza facial: $600 MXN / 90 min.
+- Corte de niño: $300 MXN / 40 min.
+- Buffer operativo predeterminado de 20 minutos entre citas.
+- Pago al finalizar mediante efectivo o transferencia.
+- No se inventan reseñas, direcciones físicas ni cargos.
+- Las reservas públicas se registran inicialmente como pendientes de confirmación.
 
-## Credenciales admin
-- Email: `Suarezmaiky25@gmail.com`
-- Contraseña temporal: `Miguel2026!` (Miguel puede cambiarla desde el panel → tab **Cuenta**)
-- Guardado en `/app/memory/test_credentials.md`
+## Seguridad y credenciales
+- Las credenciales reales no deben escribirse en documentos, commits ni archivos versionados.
+- El correo inicial, la contraseña inicial y el secreto JWT se configuran únicamente mediante variables de entorno.
+- La contraseña inicial debe ser de un solo uso y cambiarse después del primer acceso.
+- Toda credencial que haya aparecido previamente en el historial se considera comprometida y debe rotarse antes del lanzamiento.
 
-## Datos pendientes
-- Enlace Cal.com (URL editable en admin → Ajustes)
-- Perfiles reales de Instagram/Facebook
-- Reseñas reales autorizadas
-- Respuestas definitivas para "¿Realiza desvanecidos desde cero?" y "¿La barba se trabaja con navaja?" (marcadas como pendientes en la app)
+## Arquitectura de lanzamiento inicial
+- **Frontend web**: Cloudflare Pages Free.
+- **Backend**: FastAPI en Render Free.
+- **Base de datos**: MongoDB Atlas Free.
+- **Fotografías iniciales**: archivos versionados dentro del frontend.
+- **Código y despliegues**: GitHub como fuente de verdad.
 
 ## Stack técnico
-- Frontend: Expo Router, React Native, expo-font (Italiana + DM Sans), expo-image, expo-linear-gradient, expo-image-picker, expo-location, react-native-maps (con fallback web via iframe), Feather icons, AsyncStorage.
-- Backend: FastAPI, Motor (MongoDB async), Pydantic v2, PyJWT, passlib+bcrypt, Emergent Object Storage (integración managed via INTEGRATION_PROXY_URL + EMERGENT_LLM_KEY).
-- Colecciones MongoDB: services, zones, faqs, testimonials, policies, bookings, site_settings, booking_settings, admin_users, admin_audit, media.
+- Frontend: Expo Router, React Native Web, expo-font, expo-image, expo-linear-gradient, expo-location, react-native-maps y AsyncStorage.
+- Backend: FastAPI, Motor, PyMongo, Pydantic, PyJWT y passlib/bcrypt.
+- Base de datos: MongoDB.
+- Colecciones actuales: services, zones, faqs, testimonials, policies, bookings, site_settings, booking_settings, admin_users, admin_audit, media, clients y content_blocks.
 
-## Endpoints nuevos
-- `POST /api/admin/change-password` — cambia contraseña con verificación.
-- `POST /api/admin/upload?category=…` — sube imagen multipart al Object Storage.
-- `GET /api/files/{path}` — descarga bytes de la imagen para renderizar.
-- `GET /api/media?category=…` — lista pública de fotos activas.
-- `GET/PUT/DELETE /api/admin/media[/{id}]` — administración de fotos.
+## Dependencias retiradas
+El proyecto no depende de Emergent para ejecución, almacenamiento, despliegue, autenticación ni mantenimiento. Cualquier archivo o integración específica de ese entorno debe eliminarse o sustituirse antes del lanzamiento.
 
-## Testing
-- **Backend**: 31/31 tests pasando (booking rules, admin auth, media upload lifecycle, change-password, site-settings, booking lat/lng).
-- **Frontend**: verificado manualmente en preview web — home renderiza, admin dashboard con las nuevas tabs Cuenta y Fotos, flujo de reserva con LocationPicker renderiza correctamente en web.
+## Trabajo pendiente de Fase 1
+- Eliminar la integración de almacenamiento de Emergent.
+- Configurar CORS por lista permitida.
+- Fortalecer autenticación, expiración y revocación de sesiones.
+- Añadir limitación de intentos para login y reservas.
+- Evitar reservas dobles mediante una operación atómica o bloqueo de horario.
+- Añadir estados y acciones administrativas de reservas.
+- Publicar aviso de privacidad real y registrar consentimiento.
+- Añadir índices MongoDB y pruebas automatizadas de seguridad y concurrencia.
+
+## Datos comerciales pendientes
+- Perfiles reales de Instagram y Facebook.
+- Reseñas reales autorizadas.
+- Respuestas definitivas para preguntas marcadas como pendientes.
+- Dominio propio, cuando el negocio justifique el gasto.
