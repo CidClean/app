@@ -63,7 +63,10 @@ export const api = {
   bookingSettings: () => req('/booking-settings'),
   availableSlots: (serviceId: string, date: string) =>
     req(`/available-slots?service_id=${encodeURIComponent(serviceId)}&date_str=${encodeURIComponent(date)}`),
-  createBooking: (body: any) => req('/bookings', { method: 'POST', body: JSON.stringify(body) }),
+  createBooking: (body: any) => req('/bookings', {
+    method: 'POST',
+    body: JSON.stringify({ ...body, accepted_privacy: body.accepted_privacy ?? body.accepted_policies }),
+  }),
 
   login: async (email: string, password: string) => {
     const result = await req<{ token: string; email: string; expires_at?: string }>('/admin/login', {
