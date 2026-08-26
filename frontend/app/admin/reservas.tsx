@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +31,23 @@ type Booking = {
   latitude?: number | null;
   longitude?: number | null;
 };
+
+function whatsappNumber(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('52')) return digits;
+  return digits.length === 10 ? `52${digits}` : digits;
+}
+
+async function openCustomerWhatsApp(booking: Booking) {
+  const message = [
+    `Hola, ${booking.name}. Soy Miguel Suárez.`,
+    `Recibí tu solicitud para ${booking.service_name} el ${booking.date} a las ${booking.time}.`,
+    `Dirección: ${booking.address}, ${booking.neighborhood}.`,
+    '¿Me confirmas que los datos son correctos para dejar la cita confirmada?',
+  ].join(' ');
+  const url = `https://wa.me/${whatsappNumber(booking.phone)}?text=${encodeURIComponent(message)}`;
+  await Linking.openURL(url);
+}
 
 export default function ReservationsAdmin() {
   const insets = useSafeAreaInsets();
@@ -80,6 +97,15 @@ export default function ReservationsAdmin() {
     }
   };
 
+  const contactCustomer = async (booking: Booking) => {
+    setError(null);
+    try {
+      await openCustomerWhatsApp(booking);
+    } catch {
+      setError('No se pudo abrir WhatsApp para este número.');
+    }
+  };
+
   const startReschedule = (booking: Booking) => {
     setRescheduling(booking.id);
     setNewDate(booking.date);
@@ -112,8 +138,11 @@ export default function ReservationsAdmin() {
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Reservas</Text>
-          <Text style={styles.subtitle}>Confirmación y seguimiento</Text>
+          <Text style={styles.subtitle}>WhatsApp, confirmación y seguimiento</Text>
         </View>
+        <Pressable onPress={() => router.push('/admin/horarios')} style={styles.iconButton} accessibilityLabel="Configurar horarios">
+          <Feather name="calendar" size={18} color={colors.ink} />
+        </Pressable>
         <Pressable onPress={() => { setRefreshing(true); load(); }} style={styles.iconButton} accessibilityLabel="Actualizar reservas">
           <Feather name="refresh-cw" size={18} color={colors.ink} />
         </Pressable>
@@ -126,6 +155,13 @@ export default function ReservationsAdmin() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
+          <View style={styles.infoBox}>
+            <Text style={type.bodyStrong}>Cómo confirmar una reserva</Text>
+            <Text style={[type.small, { marginTop: 4, color: colors.inkSoft }]}>
+              Una solicitud pendiente ya aparta el horario. Abre WhatsApp, confirma los datos con el cliente y después pulsa Confirmar. Cancelar libera el horario inmediatamente.
+            </Text>
+          </View>
+
           {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
           {ordered.length === 0 ? (
             <View style={styles.empty}><Text style={type.body}>No hay reservas registradas.</Text></View>
@@ -150,6 +186,10 @@ export default function ReservationsAdmin() {
                 <Text style={[type.small, { marginTop: 4 }]}>{booking.address}, {booking.neighborhood}</Text>
                 {booking.note ? <Text style={[type.small, styles.note]}>“{booking.note}”</Text> : null}
 
+                {booking.status === 'pending_confirmation' ? (
+                  <Text style={[type.micro, { marginTop: spacing.md, color: colors.bronze }]}>HORARIO APARTADO MIENTRAS ESPERA CONFIRMACIÓN</Text>
+                ) : null}
+
                 {rescheduling === booking.id ? (
                   <View style={styles.rescheduleBox}>
                     <Text style={type.bodyStrong}>Nueva fecha y hora</Text>
@@ -164,6 +204,7 @@ export default function ReservationsAdmin() {
 
                 {booking.status === 'pending_confirmation' ? (
                   <View style={styles.actions}>
+                    <PillButton label="Abrir WhatsApp" variant="whatsapp" disabled={busy} onPress={() => contactCustomer(booking)} />
                     <PillButton label={busy ? 'Actualizando…' : 'Confirmar'} disabled={busy} onPress={() => changeStatus(booking, 'confirmed')} />
                     <PillButton label="Reprogramar" variant="secondary" disabled={busy} onPress={() => startReschedule(booking)} />
                     <Pressable disabled={busy} onPress={() => changeStatus(booking, 'cancelled')} style={styles.textAction}>
@@ -174,6 +215,7 @@ export default function ReservationsAdmin() {
 
                 {booking.status === 'confirmed' ? (
                   <View style={styles.actions}>
+                    <PillButton label="WhatsApp" variant="whatsapp" disabled={busy} onPress={() => contactCustomer(booking)} />
                     <PillButton label={busy ? 'Actualizando…' : 'Completar'} disabled={busy} onPress={() => changeStatus(booking, 'completed')} />
                     <PillButton label="Reprogramar" variant="secondary" disabled={busy} onPress={() => startReschedule(booking)} />
                     <Pressable disabled={busy} onPress={() => changeStatus(booking, 'no_show')} style={styles.textAction}>
@@ -196,12 +238,13 @@ export default function ReservationsAdmin() {
 }
 
 const styles = StyleSheet.create({
-  header: { minHeight: 86, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
+  header: { minHeight: 86, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.line },
   title: { ...type.h3, color: colors.ink },
   subtitle: { ...type.micro, color: colors.inkSoft, marginTop: 2 },
   iconButton: { width: 42, height: 42, borderWidth: 1, borderColor: colors.line, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   content: { padding: spacing.lg, paddingBottom: 100 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  infoBox: { padding: spacing.lg, borderWidth: 1, borderColor: colors.bronze, borderRadius: radius.lg, marginBottom: spacing.md },
   empty: { padding: spacing.xl, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg },
   errorBox: { padding: spacing.md, borderWidth: 1, borderColor: colors.danger, borderRadius: radius.md, marginBottom: spacing.md },
   errorText: { ...type.small, color: colors.danger },
