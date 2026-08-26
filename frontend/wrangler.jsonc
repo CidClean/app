@@ -1,4 +1,5 @@
 {
+  // Static Expo web deployment for Cloudflare Workers.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "app",
   "compatibility_date": "2026-08-26",
